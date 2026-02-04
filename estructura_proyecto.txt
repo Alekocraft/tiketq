@@ -1,0 +1,63 @@
+ESTRUCTURA DEL PROYECTO FLASK 
+============================= 
+Fecha: Wed 02/04/2026 16:03:46.30 
+Directorio actual: C:\Users\sinventarios\source\repos\rrhh 
+ 
+[ARCHIVOS PRINCIPALES .PY] 
+-------------------------- 
+wsgi.py 
+app\cli.py 
+app\config.py 
+app\db.py 
+app\__init__.py 
+app\controllers\admin_controller.py 
+app\controllers\auth_controller.py 
+app\controllers\health_controller.py 
+app\controllers\home_controller.py 
+app\repositories\usuarios_repo.py 
+app\services\authz.py 
+app\services\ldap_auth.py 
+app\services\mailer.py 
+ 
+[ARCHIVOS HTML en /templates/] 
+------------------------------ 
+No existe carpeta templates 
+ 
+[ARCHIVOS CSS en /static/] 
+------------------------- 
+No existe carpeta static 
+ 
+[ARCHIVOS JS en /static/] 
+------------------------- 
+ 
+[ARCHIVOS DE CONFIGURACION] 
+--------------------------- 
+.env 
+ 
+[ARCHIVOS DE ENTORNO] 
+-------------------- 
+.env 
+.env 
+ 
+[ARCHIVOS DE LOGS] 
+------------------ 
+ 
+[CARPETAS PRINCIPALES (excluyendo entornos virtuales)] 
+------------------------------------------------------ 
+[.vs] 
+[app] 
+ 
+Resumen: 
+--------- 
+Archivos .py: 13 
+Archivos HTML: 0 
+Archivos CSS: 0 
+Archivos JS: 0 
+Archivos de entorno: 2 
+Archivos de logs: 0 
+Carpetas (sin entornos virtuales): 2 
+ 
+[ENTORNOS VIRTUALES EXCLUIDOS] 
+------------------------------ 
+env 
+ 

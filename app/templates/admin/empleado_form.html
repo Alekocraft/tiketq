@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Empleado - RRHH{% endblock %}
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-body">
+    <h4 class="mb-3">Nuevo empleado</h4>
+    <form method="post">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">C.C</label>
+          <input class="form-control" name="identificacion" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Nombres</label>
+          <input class="form-control" name="nombres" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Apellidos</label>
+          <input class="form-control" name="apellidos" required>
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label">Correo</label>
+          <input class="form-control" name="correo">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Área</label>
+          <select class="form-select" name="id_area">
+            <option value="">--</option>
+            {% for a in areas %}<option value="{{ a.id_area }}">{{ a.nombre }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Cargo</label>
+          <select class="form-select" name="id_cargo">
+            <option value="">--</option>
+            {% for c in cargos %}<option value="{{ c.id_cargo }}">{{ c.nombre }}</option>{% endfor %}
+          </select>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">Grupo</label>
+          <select class="form-select" name="grupo">
+            <option value="ADMIN">ADMIN</option>
+            <option value="CABINA">CABINA</option>
+          </select>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">Activo</label>
+          <select class="form-select" name="activo">
+            <option value="1" selected>Sí</option>
+            <option value="0">No</option>
+          </select>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">TTC habilitado (Jefe)</label>
+          <select class="form-select" name="habilitado_ttc_jefe">
+            <option value="0" selected>No</option>
+            <option value="1">Sí</option>
+          </select>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">TTC habilitado (RRHH)</label>
+          <select class="form-select" name="habilitado_ttc_rrhh">
+            <option value="0" selected>No</option>
+            <option value="1">Sí</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="mt-4 d-flex gap-2">
+        <button class="btn btn-primary">Guardar</button>
+        <a class="btn btn-outline-secondary" href="/admin/empleados">Volver</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
