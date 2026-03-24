@@ -1,0 +1,5 @@
+Colores 
+
+#A73493 morado
+#0098B1 azul
+#D9D9D9 gris

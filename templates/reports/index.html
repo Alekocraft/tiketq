@@ -1,0 +1,256 @@
+{% extends "layout.html" %}
+{% block content %}
+  <section class="hero-panel hero-panel--compact">
+    <div>
+      <div class="hero-panel__eyebrow">Indicadores operativos</div>
+      <h1>Reportes</h1>
+      <p>Vista consolidada para {{ scope_labels|join(', ') if scope_labels else 'tu perfil actual' }}.</p>
+    </div>
+    <div class="hero-panel__actions">
+      <a class="btn btn-secondary" href="{{ url_for('cases.reports_export', kind='summary') }}">Exportar resumen CSV</a>
+      <a class="btn btn-ghost" href="{{ url_for('cases.reports_export', kind='cases') }}">Exportar casos CSV</a>
+      <a class="btn btn-ghost" href="{{ url_for('cases.reports_export', kind='closed', closed_case_id=closed_case_id) }}">Exportar cerrados CSV</a>
+    </div>
+  </section>
+
+  <section class="metric-grid metric-grid--6">
+    <article class="metric-card">
+      <span class="metric-card__label">Total casos</span>
+      <strong class="metric-card__value">{{ totals.get('total_cases', 0) or 0 }}</strong>
+      <span class="metric-card__meta">Dentro de tu alcance</span>
+    </article>
+    <article class="metric-card">
+      <span class="metric-card__label">Activos</span>
+      <strong class="metric-card__value">{{ totals.get('open_cases', 0) or 0 }}</strong>
+      <span class="metric-card__meta">Pendientes, asignados y reabiertos</span>
+    </article>
+    <article class="metric-card">
+      <span class="metric-card__label">Resueltos</span>
+      <strong class="metric-card__value">{{ totals.get('resolved_cases', 0) or 0 }}</strong>
+      <span class="metric-card__meta">Casos finalizados</span>
+    </article>
+    <article class="metric-card">
+      <span class="metric-card__label">Reabiertos</span>
+      <strong class="metric-card__value">{{ totals.get('reopened_cases', 0) or 0 }}</strong>
+      <span class="metric-card__meta">Seguimiento prioritario</span>
+    </article>
+    <article class="metric-card">
+      <span class="metric-card__label">Prioridad alta</span>
+      <strong class="metric-card__value">{{ totals.get('high_priority', 0) or 0 }}</strong>
+      <span class="metric-card__meta">ALTA y P1</span>
+    </article>
+    <article class="metric-card">
+      <span class="metric-card__label">Cerrados</span>
+      <strong class="metric-card__value">{{ totals.get('closed_cases', 0) or 0 }}</strong>
+      <span class="metric-card__meta">Fuera de la vista operativa</span>
+    </article>
+  </section>
+
+  <section class="report-grid">
+    <article class="panel-card">
+      <div class="section-head section-head--tight">
+        <div>
+          <h2>Por equipo</h2>
+          <p>Distribución de la carga visible por cola operativa.</p>
+        </div>
+      </div>
+      {% if by_team %}
+      <div class="table-wrap">
+        <table class="table table--clean">
+          <thead>
+            <tr>
+              <th>Equipo</th>
+              <th>Total</th>
+              <th>Activos</th>
+              <th>Resueltos</th>
+              <th>Cerrados</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in by_team %}
+            <tr>
+              <td>{{ row['assigned_team'] or 'Sin equipo' }}</td>
+              <td>{{ row['total_cases'] or 0 }}</td>
+              <td>{{ row['open_cases'] or 0 }}</td>
+              <td>{{ row['resolved_cases'] or 0 }}</td>
+              <td>{{ row['closed_cases'] or 0 }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <div class="empty-state__title">Sin datos por equipo</div>
+        <p class="muted">No hay casos visibles para agrupar en este momento.</p>
+      </div>
+      {% endif %}
+    </article>
+
+    <article class="panel-card">
+      <div class="section-head section-head--tight">
+        <div>
+          <h2>Por estado</h2>
+          <p>Conteo operativo por estado actual.</p>
+        </div>
+      </div>
+      {% if by_status %}
+      <div class="table-wrap">
+        <table class="table table--clean">
+          <thead>
+            <tr>
+              <th>Estado</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in by_status %}
+            <tr>
+              <td><span class="status-pill">{{ row['status'] or 'Sin estado' }}</span></td>
+              <td>{{ row['total_cases'] or 0 }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <div class="empty-state__title">Sin datos por estado</div>
+        <p class="muted">Aún no hay registros visibles para este reporte.</p>
+      </div>
+      {% endif %}
+    </article>
+  </section>
+
+  <section class="report-grid">
+    <article class="panel-card">
+      <div class="section-head section-head--tight">
+        <div>
+          <h2>Por prioridad</h2>
+          <p>Distribución según criticidad configurada.</p>
+        </div>
+      </div>
+      {% if by_priority %}
+      <div class="table-wrap">
+        <table class="table table--clean">
+          <thead>
+            <tr>
+              <th>Prioridad</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in by_priority %}
+            <tr>
+              <td>{{ row['priority'] or 'Sin prioridad' }}</td>
+              <td>{{ row['total_cases'] or 0 }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <div class="empty-state__title">Sin datos por prioridad</div>
+        <p class="muted">No hay casos visibles para clasificar.</p>
+      </div>
+      {% endif %}
+    </article>
+
+    <article class="panel-card">
+      <div class="section-head section-head--tight">
+        <div>
+          <h2>Responsables con mayor carga</h2>
+          <p>Top de asignación dentro de tu alcance visible.</p>
+        </div>
+      </div>
+      {% if top_owners %}
+      <div class="table-wrap">
+        <table class="table table--clean">
+          <thead>
+            <tr>
+              <th>Responsable</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in top_owners %}
+            <tr>
+              <td>{{ row['owner_name'] or 'Sin asignación' }}</td>
+              <td>{{ row['total_cases'] or 0 }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <div class="empty-state__title">Sin responsables para mostrar</div>
+        <p class="muted">La asignación aún no tiene datos visibles.</p>
+      </div>
+      {% endif %}
+    </article>
+  </section>
+
+  <section class="panel-card">
+    <div class="section-head section-head--tight">
+      <div>
+        <h2>Reporte de cerrados</h2>
+        <p>Consulta casos cerrados por número de caso. No aparecen en la vista operativa.</p>
+      </div>
+    </div>
+    <form method="get" class="filter-grid filter-grid--closed-report">
+      <div>
+        <label for="closed_case_id">Número de caso</label>
+        <input id="closed_case_id" name="closed_case_id" value="{{ closed_case_id }}" placeholder="Q-2026-00024" />
+      </div>
+      <div class="table-actions">
+        <button class="btn btn-primary" type="submit">Consultar cerrados</button>
+      </div>
+    </form>
+
+    {% if closed_case_id %}
+      {% if closed_cases %}
+      <div class="table-wrap table-wrap--compact">
+        <table class="table table--clean table--cases">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Cerrado</th>
+              <th>Equipo</th>
+              <th>Asignado</th>
+              <th>Solicitante</th>
+              <th>Asunto</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in closed_cases %}
+            <tr>
+              <td class="cell-id"><strong>{{ row['id'] }}</strong></td>
+              <td class="cell-nowrap">{{ row['closed_at'] or '-' }}</td>
+              <td>{{ row['assigned_team'] or '-' }}</td>
+              <td>{{ row['assigned_to_name'] or '-' }}</td>
+              <td>{{ row['requester_email'] or row['requester_name'] or '-' }}</td>
+              <td>{{ row['subject'] or '-' }}</td>
+              <td class="cell-nowrap"><span class="status-pill">{{ row['status'] or '-' }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <div class="empty-state__title">No hay cerrados para ese número de caso</div>
+        <p class="muted">Verifica el identificador y vuelve a consultar.</p>
+      </div>
+      {% endif %}
+    {% else %}
+      <div class="empty-state">
+        <div class="empty-state__title">Ingresa un número de caso</div>
+        <p class="muted">La consulta de cerrados se hace únicamente por número de caso.</p>
+      </div>
+    {% endif %}
+  </section>
+
+{% endblock %}

@@ -1,0 +1,115 @@
+{% extends "layout.html" %}
+{% block content %}
+  <section class="hero-panel hero-panel--compact">
+    <div>
+      <div class="hero-panel__eyebrow">Administración</div>
+      <h1>Usuarios y roles</h1>
+      <p>Solo el perfil administrador puede crear usuarios desde LDAP y asignar uno o varios roles operativos.</p>
+    </div>
+  </section>
+
+  <div class="content-grid content-grid--admin">
+    <section class="stack-lg">
+      <article class="panel-card panel-card--accent">
+        <div class="section-head">
+          <div>
+            <h2>Consultar usuario en LDAP</h2>
+            <p>Busca el usuario de red para traer nombre, correo, cargo y área.</p>
+          </div>
+        </div>
+
+        <form method="post" class="admin-user-lookup-form">
+          <input type="hidden" name="action" value="lookup">
+          <div class="filter-grid filter-grid--admin">
+            <div>
+              <label for="username">Usuario LDAP</label>
+              <input id="username" name="username" value="{{ username_value or '' }}" placeholder="usuario.red" required>
+            </div>
+            <div class="table-actions">
+              <button class="btn btn-secondary" type="submit">Consultar</button>
+            </div>
+          </div>
+        </form>
+
+        {% if preview_user %}
+          <div class="ldap-preview-grid">
+            <div class="info-tile"><span>Nombre</span><strong>{{ preview_user['display_name'] or '-' }}</strong></div>
+            <div class="info-tile"><span>Correo</span><strong>{{ preview_user['email'] or '-' }}</strong></div>
+            <div class="info-tile"><span>Cargo</span><strong>{{ preview_user['job_title'] or '-' }}</strong></div>
+            <div class="info-tile"><span>Área</span><strong>{{ preview_user['department'] or '-' }}</strong></div>
+          </div>
+
+          <form method="post" class="admin-user-save-form">
+            <input type="hidden" name="action" value="save">
+            <input type="hidden" name="username" value="{{ preview_user['username'] }}">
+
+            <div class="section-head section-head--spaced">
+              <div>
+                <h2>Asignar roles</h2>
+                <p>Selecciona uno o varios roles para este usuario.</p>
+              </div>
+            </div>
+
+            <div class="role-chip-grid">
+              {% for role in role_choices %}
+                <label class="role-chip">
+                  <input type="checkbox" name="roles" value="{{ role['key'] }}" {% if role['key'] in selected_roles %}checked{% endif %}>
+                  <span>{{ role['label'] }}</span>
+                </label>
+              {% endfor %}
+            </div>
+
+            <div class="action-row">
+              <button class="btn btn-primary" type="submit">Guardar usuario</button>
+            </div>
+          </form>
+        {% else %}
+          <div class="empty-state empty-state--soft">
+            <div class="empty-state__title">Consulta un usuario para iniciar</div>
+            <p class="muted">Una vez localizado en LDAP se habilitará la asignación de roles.</p>
+          </div>
+        {% endif %}
+      </article>
+    </section>
+
+    <aside class="stack-lg">
+      <article class="panel-card">
+        <div class="section-head">
+          <div>
+            <h2>Usuarios registrados</h2>
+            <p>Listado actual con roles y datos sincronizados.</p>
+          </div>
+        </div>
+        {% if users %}
+          <div class="user-admin-list">
+            {% for user in users %}
+              <article class="user-admin-card">
+                <div class="user-admin-card__head">
+                  <div>
+                    <strong>{{ user['display_name'] or user['id'] }}</strong>
+                    <div class="muted">{{ user['id'] }}</div>
+                  </div>
+                  <a class="btn btn-ghost btn-sm" href="{{ url_for('cases.admin_users', edit=user['id']) }}">Cargar</a>
+                </div>
+                <div class="user-admin-card__meta">
+                  <span>{{ user['email'] or 'Sin correo' }}</span>
+                  <span>{{ user['job_title'] or 'Sin cargo' }}</span>
+                  <span>{{ user['department'] or 'Sin área' }}</span>
+                </div>
+                <div class="tag-row">
+                  {% if user['role_labels'] %}
+                    {% for label in user['role_labels'] %}<span class="tag">{{ label }}</span>{% endfor %}
+                  {% else %}
+                    <span class="tag tag--muted">Sin roles</span>
+                  {% endif %}
+                </div>
+              </article>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="empty-state"><div class="empty-state__title">No hay usuarios sincronizados</div></div>
+        {% endif %}
+      </article>
+    </aside>
+  </div>
+{% endblock %}

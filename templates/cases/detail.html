@@ -1,0 +1,218 @@
+{% extends "layout.html" %}
+{% block content %}
+  <section class="case-hero-min">
+    <div class="case-hero-min__copy">
+      <span class="case-hero-min__eyebrow">Caso</span>
+      <div class="case-hero-min__id">{{ c['id'] }}</div>
+      <h1 class="case-hero-min__title">{{ c['subject'] or 'Sin asunto' }}</h1>
+    </div>
+    <div class="case-hero-min__actions">
+      <a class="btn btn-ghost btn-sm" href="{{ request.referrer or url_for('cases.list_cases') }}">Volver</a>
+    </div>
+  </section>
+
+  <div class="case-detail-stack">
+    <section class="case-block case-block--actions">
+      <div class="case-block__head">
+        <div>
+          <h2>Tareas del caso</h2>
+          <p>Gestiona el caso desde un solo bloque.</p>
+        </div>
+      </div>
+
+      <div class="case-actions-wrap {% if can_triage and (can_resolve or can_close or can_reopen) %}case-actions-wrap--split{% endif %}">
+        {% if can_triage %}
+          <section class="case-mini-panel">
+            <h3>Reasignar o escalar</h3>
+            <form method="post" action="{{ url_for('cases.triage_case', case_id=c['id']) }}" class="action-form action-form--compact">
+              <div class="compact-grid compact-grid--2">
+                <div>
+                  <label for="assigned_team">Destino</label>
+                  <select id="assigned_team" name="assigned_team" required>
+                    <option value="">Selecciona un destino</option>
+                    {% for team in triage_teams %}
+                      <option value="{{ team['key'] }}" {% if c['assigned_team'] == team['key'] %}selected{% endif %}>{{ team['label'] }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div>
+                  <label for="priority">Prioridad</label>
+                  <select id="priority" name="priority" required>
+                    <option value="">Selecciona prioridad</option>
+                    {% for option in priority_choices %}
+                      <option value="{{ option['key'] }}" {% if c['priority'] == option['key'] %}selected{% endif %}>{{ option['label'] }} · {{ option['response_min'] // 60 }}h / {{ option['resolution_min'] // 60 }}h</option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label for="triage_note">Nota de reasignación</label>
+                <textarea id="triage_note" name="note" rows="3" placeholder="Contexto del cambio de cola"></textarea>
+              </div>
+              <div class="action-row action-row--end">
+                <button class="btn btn-secondary btn-sm" type="submit">Guardar cambio</button>
+              </div>
+            </form>
+          </section>
+        {% endif %}
+
+        {% if can_resolve or can_close or can_reopen %}
+          <section class="case-mini-panel">
+            <h3>Cambiar estado</h3>
+            <div class="status-actions-stack status-actions-stack--compact">
+              {% if can_resolve %}
+                <form method="post" action="{{ url_for('cases.change_case_status', case_id=c['id']) }}" class="action-form action-form--compact status-action-card">
+                  <input type="hidden" name="action" value="resolve">
+                  <div class="status-action-card__head">
+                    <strong>Marcar como resuelto</strong>
+                    <span class="muted">Finaliza la atención operativa.</span>
+                  </div>
+                  <textarea id="resolve_note" name="note" rows="3" placeholder="Describe la solución aplicada" required></textarea>
+                  <div class="action-row action-row--end">
+                    <button class="btn btn-primary btn-sm" type="submit">Resolver</button>
+                  </div>
+                </form>
+              {% endif %}
+
+              {% if can_close %}
+                <form method="post" action="{{ url_for('cases.change_case_status', case_id=c['id']) }}" class="action-form action-form--compact status-action-card">
+                  <input type="hidden" name="action" value="close">
+                  <div class="status-action-card__head">
+                    <strong>Cerrar caso</strong>
+                    <span class="muted">Lo retira de la bandeja operativa.</span>
+                  </div>
+                  <textarea id="close_note" name="note" rows="3" placeholder="Confirma el cierre del caso" required></textarea>
+                  <div class="action-row action-row--end">
+                    <button class="btn btn-secondary btn-sm" type="submit">Cerrar</button>
+                  </div>
+                </form>
+              {% endif %}
+
+              {% if can_reopen %}
+                <form method="post" action="{{ url_for('cases.change_case_status', case_id=c['id']) }}" class="action-form action-form--compact status-action-card">
+                  <input type="hidden" name="action" value="reopen">
+                  <div class="status-action-card__head">
+                    <strong>Reabrir caso</strong>
+                    <span class="muted">Devuelve el caso al flujo operativo.</span>
+                  </div>
+                  <textarea id="reopen_note" name="note" rows="3" placeholder="Indica el motivo de reapertura" required></textarea>
+                  <div class="action-row action-row--end">
+                    <button class="btn btn-ghost btn-sm" type="submit">Reabrir</button>
+                  </div>
+                </form>
+              {% endif %}
+            </div>
+          </section>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="case-block">
+      <div class="case-block__head">
+        <div>
+          <h2>Resumen del caso</h2>
+          <p>Estado operativo y vencimientos en un solo recuadro.</p>
+        </div>
+      </div>
+      <div class="case-summary-grid case-summary-grid--single">
+        <div class="summary-item">
+          <span>Estado</span>
+          <strong><span class="status-pill">{{ c['status'] or '-' }}</span></strong>
+        </div>
+        <div class="summary-item">
+          <span>Prioridad</span>
+          <strong><span class="priority-pill priority-pill--{{ c['priority_css'] }}">{{ c['priority_label'] or c['priority'] or '-' }}</span></strong>
+        </div>
+        <div class="summary-item">
+          <span>Equipo</span>
+          <strong>{{ c['assigned_team_label'] or '-' }}</strong>
+        </div>
+        <div class="summary-item">
+          <span>Asignado a</span>
+          <strong>{{ c['assigned_user_name'] or c['assigned_to'] or '-' }}</strong>
+        </div>
+        <div class="summary-item">
+          <span>ANS primera respuesta</span>
+          <strong>{{ c['sla_response_text'] }}</strong>
+        </div>
+        <div class="summary-item">
+          <span>ANS resolución</span>
+          <strong>{{ c['sla_resolution_text'] }}</strong>
+        </div>
+        <div class="summary-item">
+          <span>Vence primera respuesta</span>
+          <strong>{{ c['response_due_at_display'] }}</strong>
+        </div>
+        <div class="summary-item">
+          <span>Vence resolución</span>
+          <strong>{{ c['resolution_due_at_display'] }}</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="case-block">
+      <div class="case-block__head">
+        <div>
+          <h2>Información del caso</h2>
+          <p>Remitente, adjuntos, descripción e historial en un solo recuadro.</p>
+        </div>
+      </div>
+
+      <div class="case-info-grid">
+        <aside class="case-info-grid__side">
+          <div class="info-group">
+            <h3>Remitente</h3>
+            <div class="detail-list detail-list--stacked detail-list--soft">
+              <div><span>Solicitante</span><strong>{{ c['requester_name'] or '-' }}</strong></div>
+              <div><span>Correo</span><strong>{{ c['requester_email'] or '-' }}</strong></div>
+            </div>
+          </div>
+
+          <div class="info-group">
+            <h3>Adjuntos</h3>
+            {% if atts %}
+              <ul class="attachment-list attachment-list--stacked attachment-list--soft">
+                {% for a in atts %}
+                  <li>
+                    <a href="{{ url_for('cases.download_attachment', case_id=c['id'], filename=a['filename']) }}">{{ a['filename'] }}</a>
+                    <span class="muted">{{ a['size_bytes'] or 0 }} bytes</span>
+                  </li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="muted">Sin adjuntos asociados.</p>
+            {% endif %}
+          </div>
+        </aside>
+
+        <div class="case-info-grid__main">
+          <div class="info-group">
+            <h3>Descripción</h3>
+            <pre class="desc desc--flat desc--soft">{{ c['description'] or '-' }}</pre>
+          </div>
+
+          <div class="info-group">
+            <div class="section-head section-head--tight">
+              <div>
+                <h3>Historial</h3>
+                <p>Notas y actualizaciones registradas sobre el caso.</p>
+              </div>
+            </div>
+            {% if updates %}
+              <div class="timeline-list timeline-list--soft">
+                {% for item in updates %}
+                  <div class="timeline-entry">
+                    <div class="timeline-entry__title">{{ item['author_name'] or 'Sistema' }} · {{ item['created_at'] }}</div>
+                    <div class="timeline-entry__body">{{ item['message'] }}</div>
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <p class="muted">No hay movimientos registrados todavía.</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+{% endblock %}

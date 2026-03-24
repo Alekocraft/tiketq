@@ -1,0 +1,195 @@
+{% extends "layout.html" %}
+
+{% block head_extra %}
+<style>
+  .admin-grid { display:grid; gap:24px; }
+  .admin-stats { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap:16px; }
+  .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:18px 20px; box-shadow:var(--shadow-soft); }
+  .stat-card__label { color:var(--muted); font-size:.84rem; text-transform:uppercase; letter-spacing:.05em; }
+  .stat-card__value { font-size:2rem; font-weight:800; margin-top:8px; }
+  .panel-card { background:var(--surface); border:1px solid var(--border); border-radius:24px; padding:24px; box-shadow:var(--shadow-soft); }
+  .section-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:18px; }
+  .section-head h2 { margin:0; font-size:1.2rem; }
+  .section-head p { margin:6px 0 0; color:var(--muted); }
+  .filter-grid { display:grid; grid-template-columns: 2fr 1fr 1fr auto; gap:14px; align-items:end; }
+  .input, .select { width:100%; border:1px solid var(--border); border-radius:14px; padding:12px 14px; background:#fff; font:inherit; }
+  .user-table-wrap { overflow:auto; }
+  .user-table { width:100%; border-collapse:collapse; min-width:940px; }
+  .user-table th, .user-table td { padding:14px 12px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top; }
+  .user-table th { font-size:.82rem; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); }
+  .user-name { font-weight:800; }
+  .user-meta { color:var(--muted); font-size:.9rem; margin-top:4px; }
+  .tag-row { display:flex; gap:8px; flex-wrap:wrap; }
+  .tag { display:inline-flex; align-items:center; padding:6px 10px; border-radius:999px; background:#f3f5fa; border:1px solid var(--border); font-size:.86rem; font-weight:700; }
+  .tag--muted { color:var(--muted); }
+  .status-pill { display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; font-size:.86rem; font-weight:700; }
+  .status-pill--active { background:rgba(0,152,177,.12); color:var(--blue); }
+  .status-pill--inactive { background:rgba(167,52,147,.12); color:var(--purple); }
+  .actions-col { width:240px; }
+  .action-row { display:flex; gap:8px; flex-wrap:wrap; }
+  .btn-danger { background:#fff1f1; color:#b42318; border-color:#fecdca; }
+  .empty-state { padding:28px; text-align:center; color:var(--muted); border:1px dashed var(--border); border-radius:18px; background:var(--surface-soft); }
+  .hero-panel { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; margin-bottom:24px; }
+  .hero-panel h1 { margin:8px 0 0; }
+  .hero-panel p { margin:8px 0 0; color:var(--muted); max-width:760px; }
+  .hero-panel__eyebrow { font-size:.8rem; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--blue); }
+  @media (max-width: 980px) { .filter-grid { grid-template-columns: 1fr; } .hero-panel { flex-direction:column; align-items:stretch; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="hero-panel">
+  <div>
+    <div class="hero-panel__eyebrow">Administración</div>
+    <h1>Módulo de usuarios</h1>
+    <p>
+      Gestión centralizada de usuarios autorizados del sistema de casos. Solo el perfil administrador puede crear,
+      activar, desactivar, editar y eliminar usuarios.
+    </p>
+  </div>
+  <div class="action-row">
+    <a class="btn btn-secondary" href="{{ url_for('users.create_user') }}">Crear usuario</a>
+  </div>
+</section>
+
+<div class="admin-grid">
+  <section class="admin-stats">
+    <article class="stat-card">
+      <div class="stat-card__label">Total</div>
+      <div class="stat-card__value">{{ stats.total_users }}</div>
+    </article>
+    <article class="stat-card">
+      <div class="stat-card__label">Activos</div>
+      <div class="stat-card__value">{{ stats.active_users }}</div>
+    </article>
+    <article class="stat-card">
+      <div class="stat-card__label">Inactivos</div>
+      <div class="stat-card__value">{{ stats.inactive_users }}</div>
+    </article>
+    <article class="stat-card">
+      <div class="stat-card__label">Administradores</div>
+      <div class="stat-card__value">{{ stats.admin_users }}</div>
+    </article>
+  </section>
+
+  <section class="panel-card">
+    <div class="section-head">
+      <div>
+        <h2>Consulta y filtros</h2>
+        <p>Busca por usuario, nombre, correo, cargo o área; y filtra por rol o estado.</p>
+      </div>
+    </div>
+
+    <form method="get" class="filter-grid">
+      <div>
+        <label for="q">Buscar</label>
+        <input class="input" id="q" name="q" value="{{ q }}" placeholder="usuario, nombre, correo, cargo o área">
+      </div>
+      <div>
+        <label for="role">Rol</label>
+        <select class="select" id="role" name="role">
+          <option value="">Todos</option>
+          {% for item in role_choices %}
+            <option value="{{ item.key }}" {% if role == item.key %}selected{% endif %}>{{ item.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="state">Estado</label>
+        <select class="select" id="state" name="state">
+          <option value="">Todos</option>
+          <option value="active" {% if state == 'active' %}selected{% endif %}>Activos</option>
+          <option value="inactive" {% if state == 'inactive' %}selected{% endif %}>Inactivos</option>
+        </select>
+      </div>
+      <div class="action-row">
+        <button class="btn btn-primary" type="submit">Filtrar</button>
+        <a class="btn btn-ghost" href="{{ url_for('users.list_users') }}">Limpiar</a>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel-card">
+    <div class="section-head">
+      <div>
+        <h2>Usuarios registrados</h2>
+        <p>Listado aterrizado al proyecto de gestión de casos, con roles operativos y estado de acceso.</p>
+      </div>
+    </div>
+
+    {% if users %}
+      <div class="user-table-wrap">
+        <table class="user-table">
+          <thead>
+            <tr>
+              <th>Usuario</th>
+              <th>Contacto</th>
+              <th>Roles</th>
+              <th>Estado</th>
+              <th>Última actualización</th>
+              <th class="actions-col">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for user in users %}
+              <tr>
+                <td>
+                  <div class="user-name">{{ user.display_name or user.id }}</div>
+                  <div class="user-meta">{{ user.id }}</div>
+                  {% if user.job_title %}<div class="user-meta">{{ user.job_title }}</div>{% endif %}
+                  {% if user.department %}<div class="user-meta">{{ user.department }}</div>{% endif %}
+                </td>
+                <td>
+                  {{ user.email or 'Sin correo' }}
+                </td>
+                <td>
+                  <div class="tag-row">
+                    {% if user.role_labels %}
+                      {% for label in user.role_labels %}
+                        <span class="tag">{{ label }}</span>
+                      {% endfor %}
+                    {% else %}
+                      <span class="tag tag--muted">Sin roles</span>
+                    {% endif %}
+                  </div>
+                </td>
+                <td>
+                  {% if user.is_active %}
+                    <span class="status-pill status-pill--active">Activo</span>
+                  {% else %}
+                    <span class="status-pill status-pill--inactive">Inactivo</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {{ user.updated_at.strftime('%Y-%m-%d %H:%M') if user.updated_at else '-' }}
+                </td>
+                <td class="actions-col">
+                  <div class="action-row">
+                    <a class="btn btn-ghost btn-sm" href="{{ url_for('users.edit_user', user_id=user.id) }}">Editar</a>
+                    {% if user.is_active %}
+                      <form method="post" action="{{ url_for('users.deactivate_user', user_id=user.id) }}" onsubmit="return confirm('¿Desactivar a {{ user.id }}?')">
+                        <button class="btn btn-ghost btn-sm" type="submit">Desactivar</button>
+                      </form>
+                    {% else %}
+                      <form method="post" action="{{ url_for('users.reactivate_user', user_id=user.id) }}" onsubmit="return confirm('¿Reactivar a {{ user.id }}?')">
+                        <button class="btn btn-secondary btn-sm" type="submit">Reactivar</button>
+                      </form>
+                      <form method="post" action="{{ url_for('users.delete_user', user_id=user.id) }}" onsubmit="return confirm('¿Eliminar definitivamente a {{ user.id }}? Esta acción no se puede deshacer.')">
+                        <button class="btn btn-danger btn-sm" type="submit">Eliminar</button>
+                      </form>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        No hay usuarios que coincidan con los filtros aplicados.
+      </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

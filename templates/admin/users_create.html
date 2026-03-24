@@ -1,0 +1,135 @@
+{% extends "layout.html" %}
+
+{% block head_extra %}
+<style>
+  .page-grid { display:grid; gap:24px; grid-template-columns: 1.15fr .85fr; }
+  .panel-card { background:var(--surface); border:1px solid var(--border); border-radius:24px; padding:24px; box-shadow:var(--shadow-soft); }
+  .section-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:18px; }
+  .section-head h1, .section-head h2 { margin:0; }
+  .section-head p { margin:6px 0 0; color:var(--muted); }
+  .hero-panel__eyebrow { font-size:.8rem; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--blue); }
+  .form-grid { display:grid; gap:16px; grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .field { display:flex; flex-direction:column; gap:8px; }
+  .field--full { grid-column:1 / -1; }
+  .input { width:100%; border:1px solid var(--border); border-radius:14px; padding:12px 14px; background:#fff; font:inherit; }
+  .helper { color:var(--muted); font-size:.9rem; }
+  .role-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap:12px; }
+  .role-chip { display:flex; align-items:center; gap:10px; padding:12px 14px; border:1px solid var(--border); border-radius:16px; background:var(--surface-soft); }
+  .role-chip input { width:18px; height:18px; }
+  .check-row { display:flex; align-items:center; gap:10px; }
+  .action-row { display:flex; gap:10px; flex-wrap:wrap; }
+  .preview-grid { display:grid; gap:14px; grid-template-columns:1fr; }
+  .info-tile { background:var(--surface-soft); border:1px solid var(--border); border-radius:18px; padding:16px; }
+  .info-tile span { display:block; color:var(--muted); font-size:.84rem; margin-bottom:8px; }
+  .info-tile strong { display:block; font-size:1rem; }
+  .empty-state { padding:24px; text-align:center; color:var(--muted); border:1px dashed var(--border); border-radius:18px; background:var(--surface-soft); }
+  @media (max-width: 980px) { .page-grid { grid-template-columns:1fr; } .form-grid { grid-template-columns:1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="section-head">
+  <div>
+    <div class="hero-panel__eyebrow">Administración</div>
+    <h1>Crear usuario autorizado</h1>
+    <p>Consulta el usuario en LDAP, valida sus datos corporativos y asígnale los roles del sistema.</p>
+  </div>
+  <div class="action-row">
+    <a class="btn btn-ghost" href="{{ url_for('users.list_users') }}">Volver al módulo</a>
+  </div>
+</section>
+
+<div class="page-grid">
+  <section class="panel-card">
+    <div class="section-head">
+      <div>
+        <h2>Consulta LDAP</h2>
+        <p>Primero ubica al usuario por su identificador de red.</p>
+      </div>
+    </div>
+
+    <form method="post" class="action-row" style="margin-bottom:20px;">
+      <input type="hidden" name="action" value="lookup">
+      <div class="field" style="flex:1 1 320px;">
+        <label for="username">Usuario LDAP</label>
+        <input class="input" id="username" name="username" value="{{ username_value }}" placeholder="usuario.red" required>
+      </div>
+      <div class="field" style="justify-content:flex-end; min-width:180px;">
+        <label>&nbsp;</label>
+        <button class="btn btn-secondary" type="submit">Consultar LDAP</button>
+      </div>
+    </form>
+
+    <form method="post">
+      <input type="hidden" name="action" value="save">
+      <input type="hidden" name="username" value="{{ preview_user.username if preview_user else username_value }}">
+
+      <div class="form-grid">
+        <div class="field field--full">
+          <label for="display_name">Nombre visible</label>
+          <input class="input" id="display_name" name="display_name" value="{{ form_data.display_name }}" {% if not preview_user %}readonly{% endif %}>
+          <div class="helper">Se precarga desde LDAP. Puedes ajustar el texto antes de guardar.</div>
+        </div>
+        <div class="field">
+          <label for="email">Correo</label>
+          <input class="input" id="email" name="email" value="{{ form_data.email }}" {% if not preview_user %}readonly{% endif %}>
+        </div>
+        <div class="field">
+          <label for="job_title">Cargo</label>
+          <input class="input" id="job_title" name="job_title" value="{{ form_data.job_title }}" {% if not preview_user %}readonly{% endif %}>
+        </div>
+        <div class="field field--full">
+          <label for="department">Área</label>
+          <input class="input" id="department" name="department" value="{{ form_data.department }}" {% if not preview_user %}readonly{% endif %}>
+        </div>
+        <div class="field field--full">
+          <label>Roles del sistema</label>
+          <div class="role-grid">
+            {% for item in role_choices %}
+              <label class="role-chip">
+                <input type="checkbox" name="roles" value="{{ item.key }}" {% if item.key in selected_roles %}checked{% endif %} {% if not preview_user %}disabled{% endif %}>
+                <span>{{ item.label }}</span>
+              </label>
+            {% endfor %}
+          </div>
+          <div class="helper">El primer rol seleccionado quedará como rol principal y todos quedarán registrados en la tabla relacional.</div>
+        </div>
+        <div class="field field--full">
+          <label class="check-row">
+            <input type="checkbox" name="is_active" value="1" {% if form_data.is_active %}checked{% endif %} {% if not preview_user %}disabled{% endif %}>
+            <span>Usuario activo y habilitado para iniciar sesión</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="action-row" style="margin-top:20px;">
+        <button class="btn btn-primary" type="submit" {% if not preview_user %}disabled{% endif %}>Guardar usuario</button>
+        <a class="btn btn-ghost" href="{{ url_for('users.list_users') }}">Cancelar</a>
+      </div>
+    </form>
+  </section>
+
+  <aside class="panel-card">
+    <div class="section-head">
+      <div>
+        <h2>Vista previa</h2>
+        <p>Confirmación rápida del usuario encontrado.</p>
+      </div>
+    </div>
+
+    {% if preview_user %}
+      <div class="preview-grid">
+        <div class="info-tile"><span>Usuario</span><strong>{{ preview_user.username }}</strong></div>
+        <div class="info-tile"><span>Nombre</span><strong>{{ preview_user.display_name or '-' }}</strong></div>
+        <div class="info-tile"><span>Correo</span><strong>{{ preview_user.email or '-' }}</strong></div>
+        <div class="info-tile"><span>Cargo</span><strong>{{ preview_user.job_title or '-' }}</strong></div>
+        <div class="info-tile"><span>Área</span><strong>{{ preview_user.department or '-' }}</strong></div>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        Consulta primero un usuario LDAP para habilitar la asignación de roles y el alta en el sistema.
+      </div>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

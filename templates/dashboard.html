@@ -1,0 +1,85 @@
+{% extends "layout.html" %}
+{% set title = "Inicio" %}
+
+{% block content %}
+<section class="hero-panel hero-panel--dashboard-compact">
+  <div>
+    <div class="hero-panel__eyebrow">Panel operativo</div>
+    <h1>Visión general de la operación</h1>
+    <p>Resumen inmediato del alcance visible para {{ active_roles|join(', ') if active_roles else 'tu perfil actual' }}.</p>
+  </div>
+  <div class="hero-panel__actions">
+    <a class="btn btn-primary" href="/mis-tickets">Abrir mis tickets</a>
+    <a class="btn btn-ghost" href="/reports">Ver reportes</a>
+  </div>
+</section>
+
+<section class="metric-grid metric-grid--5 metric-grid--dashboard-compact">
+  <article class="metric-card">
+    <span class="metric-card__label">Total casos</span>
+    <strong class="metric-card__value">{{ total_cases or 0 }}</strong>
+    <span class="metric-card__meta">Visible por tus roles</span>
+  </article>
+  <article class="metric-card">
+    <span class="metric-card__label">Activos</span>
+    <strong class="metric-card__value">{{ open_cases or 0 }}</strong>
+    <span class="metric-card__meta">Pendientes, asignados y reabiertos</span>
+  </article>
+  <article class="metric-card">
+    <span class="metric-card__label">Resueltos</span>
+    <strong class="metric-card__value">{{ resolved_cases or 0 }}</strong>
+    <span class="metric-card__meta">Casos finalizados</span>
+  </article>
+  <article class="metric-card">
+    <span class="metric-card__label">Prioridad alta</span>
+    <strong class="metric-card__value">{{ high_priority or 0 }}</strong>
+    <span class="metric-card__meta">Casos ALTA</span>
+  </article>
+  <article class="metric-card">
+    <span class="metric-card__label">Mi bandeja</span>
+    <strong class="metric-card__value">{{ my_cases or 0 }}</strong>
+    <span class="metric-card__meta">Visible en mis tickets</span>
+  </article>
+</section>
+
+<section class="dashboard-summary-grid">
+  <article class="panel-card panel-card--accent">
+    <div class="section-head section-head--tight">
+      <div>
+        <h2>Última ingesta</h2>
+        <p>Estado del último procesamiento de correo.</p>
+      </div>
+    </div>
+    {% if latest_ingest %}
+      <div class="detail-list">
+        <div><span>Fecha</span><strong>{{ latest_ingest.processed_at or latest_ingest.created_at or '-' }}</strong></div>
+        <div><span>Estado</span><strong>{{ latest_ingest.status or '-' }}</strong></div>
+        <div><span>Caso</span><strong>{{ latest_ingest.case_id or '-' }}</strong></div>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <div class="empty-state__title">Sin eventos de ingesta</div>
+        <p class="muted">Aún no hay registros del procesamiento de correo.</p>
+      </div>
+    {% endif %}
+  </article>
+
+  <article class="panel-card">
+    <div class="section-head section-head--tight">
+      <div>
+        <h2>Roles activos</h2>
+        <p>Permisos y visibilidad calculados para tu sesión.</p>
+      </div>
+    </div>
+    <div class="tag-row">
+      {% if active_roles %}
+        {% for role in active_roles %}
+          <span class="tag">{{ role }}</span>
+        {% endfor %}
+      {% else %}
+        <span class="tag">Sin roles activos</span>
+      {% endif %}
+    </div>
+  </article>
+</section>
+{% endblock %}

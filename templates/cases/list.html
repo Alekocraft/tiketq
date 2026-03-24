@@ -1,0 +1,114 @@
+{% extends "layout.html" %}
+{% block content %}
+  <section class="hero-panel hero-panel--compact">
+    <div>
+      <div class="hero-panel__eyebrow">{% if scope == 'mine' %}Seguimiento personal{% else %}Bandeja operativa{% endif %}</div>
+      <h1>{% if scope == 'mine' %}Mis tickets{% else %}Casos{% endif %}</h1>
+      <p>{% if scope == 'mine' %}Vista filtrada por tu usuario y por los roles operativos asignados.{% else %}Vista filtrada por los roles: {{ scope_labels|join(', ') }}.{% endif %}</p>
+    </div>
+    <div class="hero-panel__actions">
+      {% if current_user.can_ingest() %}
+      <form class="inline-form" method="post" action="{{ url_for('cases.ingest_emails_action') }}">
+        <button class="btn btn-secondary" type="submit">Ingestar correos</button>
+      </form>
+      {% endif %}
+      <a class="btn btn-ghost" href="{{ url_for('cases.dashboard') }}">Volver al panel</a>
+    </div>
+  </section>
+
+  <section class="metric-grid metric-grid--4">
+    <article class="metric-card"><span class="metric-card__label">Total</span><strong class="metric-card__value">{{ summary.get('total_cases', 0) or 0 }}</strong></article>
+    <article class="metric-card"><span class="metric-card__label">Activos</span><strong class="metric-card__value">{{ summary.get('open_cases', 0) or 0 }}</strong></article>
+    <article class="metric-card"><span class="metric-card__label">Resueltos</span><strong class="metric-card__value">{{ summary.get('resolved_cases', 0) or 0 }}</strong></article>
+    <article class="metric-card"><span class="metric-card__label">Reabiertos</span><strong class="metric-card__value">{{ summary.get('reopened_cases', 0) or 0 }}</strong></article>
+  </section>
+
+  <section class="panel-card">
+    <div class="section-head">
+      <div>
+        <h2>Filtros</h2>
+        <p>Busca por ID, asunto, solicitante o equipo.</p>
+      </div>
+    </div>
+    <form method="get" class="filter-grid filter-grid--wide">
+      <div>
+        <label for="q">Buscar</label>
+        <input id="q" name="q" value="{{ q }}" placeholder="ID, asunto o correo" />
+      </div>
+      <div>
+        <label for="status">Estado</label>
+        <select id="status" name="status">
+          <option value="">Todos</option>
+          {% for s in ["PENDIENTE","ASIGNADO","RESUELTO","REABIERTO"] %}
+            <option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% if scope != 'mine' and current_user.has_role('administrador') %}
+      <div>
+        <label for="assigned_team">Equipo</label>
+        <select id="assigned_team" name="assigned_team">
+          <option value="">Todos</option>
+          {% for role in role_choices %}
+            <option value="{{ role['key'] }}" {% if assigned_team == role['key'] %}selected{% endif %}>{{ role['label'] }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div>
+        <label for="limit">Cantidad</label>
+        <select id="limit" name="limit">
+          {% for n in [25, 50, 100, 200] %}
+            <option value="{{ n }}" {% if limit == n %}selected{% endif %}>{{ n }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="table-actions"><button class="btn btn-primary" type="submit">Aplicar filtros</button></div>
+    </form>
+  </section>
+
+  <section class="panel-card">
+    <div class="section-head">
+      <div>
+        <h2>Listado de casos</h2>
+        <p>Los casos cerrados ya no aparecen en esta vista operativa; se consultan desde reportes.</p>
+      </div>
+    </div>
+    {% if cases %}
+      <div class="table-wrap">
+        <table class="table table--clean table--cases">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Estado</th>
+              <th>Prioridad</th>
+              <th>ANS</th>
+              <th>Equipo</th>
+              <th>Asignado</th>
+              <th>Asunto</th>
+              <th>Solicitante</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in cases %}
+              <tr>
+                <td class="cell-id"><strong>{{ c['id'] }}</strong></td>
+                <td class="cell-nowrap"><span class="status-pill">{{ c['status'] or '-' }}</span></td>
+                <td class="cell-nowrap"><span class="priority-pill priority-pill--{{ c['priority_css'] }}">{{ c['priority_label'] }}</span></td>
+                <td class="cell-nowrap"><span class="muted">{{ c['sla_window_text'] }}</span></td>
+                <td>{{ c['assigned_team_label'] or '-' }}</td>
+                <td>{{ c['assigned_user_name'] or c['assigned_to'] or '-' }}</td>
+                <td>{{ c['subject'] or '-' }}</td>
+                <td>{{ c['requester_email'] or '-' }}</td>
+                <td><a class="table-link" href="{{ url_for('cases.case_detail', case_id=c['id']) }}">Ver detalle</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state"><div class="empty-state__title">No hay casos para los filtros seleccionados</div><p class="muted">Puedes limpiar filtros o ejecutar una nueva ingesta.</p></div>
+    {% endif %}
+  </section>
+{% endblock %}

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ingreso</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body class="login-body">
+  <div class="login-container">
+    <section class="login-card">
+      <div class="login-card__logo">
+        <img src="{{ url_for('static', filename='Qualitas_Logo.svg') }}" alt="Qualitas">
+      </div>
+
+      <div class="login-card__header">
+        <h1>Ingreso al sistema</h1>
+        <p>Autentícate con tu usuario de red.</p>
+      </div>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flash-area">
+            {% for category, message in messages %}
+              <div class="flash flash--{{ category }}">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      <form method="post" autocomplete="off" class="login-form">
+        <div class="field">
+          <label for="usuario">Usuario</label>
+          <input id="usuario" name="usuario" type="text" class="form-control" required autofocus>
+        </div>
+        <div class="field">
+          <label for="contrasena">Contraseña</label>
+          <input id="contrasena" name="contrasena" type="password" class="form-control" required>
+        </div>
+        <button class="btn btn-primary" type="submit" style="width:100%;">Ingresar</button>
+      </form>
+    </section>
+  </div>
+</body>
+</html>

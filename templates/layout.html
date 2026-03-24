@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ title or "Inicio" }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  {% block head_extra %}{% endblock %}
+</head>
+<body class="app-body">
+  <header class="app-header">
+    <div class="app-header__glow app-header__glow--left"></div>
+    <div class="app-header__glow app-header__glow--right"></div>
+
+    <div class="app-header__shell">
+      <div class="app-toolbar">
+        <a class="brand" href="/dashboard">
+          <span class="brand__mark" aria-hidden="true">
+            <img src="{{ url_for('static', filename='Qualitas_Logo.svg') }}" alt="Qualitas" class="brand__logo">
+          </span>
+          <span class="brand__copy">
+            <span class="brand__eyebrow">Portal operativo</span>
+            <span class="brand__title">Gestión corporativa de casos</span>
+          </span>
+        </a>
+
+        <div class="toolbar-actions">
+          {% if current_user.is_authenticated and current_user.can_ingest() %}
+          <form class="inline-form" method="post" action="{{ url_for('cases.ingest_emails_action') }}">
+            <button class="btn btn-secondary btn-pill" type="submit">Ingestar correos</button>
+          </form>
+          {% endif %}
+
+          <a class="notif-bell" href="/notifications" aria-label="Notificaciones">
+            <span class="notif-bell__icon">🔔</span>
+            {% if notif_count and notif_count|int > 0 %}
+            <span class="notif-bell__badge">{{ notif_count }}</span>
+            {% endif %}
+          </a>
+
+          <div class="userbox">
+            <div class="userbox__avatar">{{ (current_user.display_name or current_user.username or 'U')[:1]|upper }}</div>
+            <div class="userbox__meta">
+              <div class="userbox__name">{{ current_user.display_name or current_user.username }}</div>
+              <div class="userbox__role">
+                {% if current_user.job_title %}
+                  {{ current_user.job_title }}
+                {% else %}
+                  {{ current_user.primary_role_label if current_user.primary_role_label else 'Sin rol' }}
+                {% endif %}
+              </div>
+            </div>
+            <a class="btn btn-ghost btn-sm" href="/logout">Cerrar sesión</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div class="app-shell">
+      <aside class="app-sidebar">
+        <nav class="sidebar-nav" aria-label="Principal">
+          <a class="sidebar-link {% if request.path in ['/dashboard', '/'] %}active{% endif %}" href="/dashboard">
+            <span class="sidebar-link__label">Panel</span>
+            <span class="sidebar-link__meta">Resumen</span>
+          </a>
+
+          <a class="sidebar-link {% if request.path.startswith('/cases') and request.path != '/cases/mis-tickets' and request.path != '/mis-tickets' %}active{% endif %}" href="/cases">
+            <span class="sidebar-link__label">Casos</span>
+            <span class="sidebar-link__meta">Operación general</span>
+          </a>
+
+          <a class="sidebar-link {% if request.path in ['/mis-tickets', '/cases/mis-tickets'] %}active{% endif %}" href="/mis-tickets">
+            <span class="sidebar-link__label">Mis tickets</span>
+            <span class="sidebar-link__meta">Mi seguimiento</span>
+          </a>
+
+          <a class="sidebar-link {% if request.path.startswith('/reports') %}active{% endif %}" href="/reports">
+            <span class="sidebar-link__label">Reportes</span>
+            <span class="sidebar-link__meta">Indicadores</span>
+          </a>
+
+          <a class="sidebar-link {% if request.path.startswith('/notifications') %}active{% endif %}" href="/notifications">
+            <span class="sidebar-link__label">Notificaciones</span>
+            <span class="sidebar-link__meta">Seguimiento operativo</span>
+            {% if notif_count and notif_count|int > 0 %}
+              <span class="sidebar-link__badge">{{ notif_count }}</span>
+            {% endif %}
+          </a>
+
+          {% if current_user.is_authenticated and current_user.has_role('administrador') %}
+          <a class="sidebar-link {% if request.path.startswith('/admin/users') %}active{% endif %}" href="{{ url_for('cases.admin_users') }}">
+            <span class="sidebar-link__label">Usuarios</span>
+            <span class="sidebar-link__meta">Accesos y roles</span>
+          </a>
+          {% endif %}
+        </nav>
+      </aside>
+
+      <section class="app-content">
+        <div class="container container--content">
+          <div class="flash-area">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+              {% if messages %}
+                {% for category, message in messages %}
+                  <div class="flash flash--{{ category }}">{{ message }}</div>
+                {% endfor %}
+              {% endif %}
+            {% endwith %}
+          </div>
+
+          {% block content %}{% endblock %}
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
