@@ -92,12 +92,12 @@
               </label>
             {% endfor %}
           </div>
-          <div class="helper">El primer rol seleccionado quedará como rol principal y todos quedarán registrados en la tabla relacional.</div>
+          <div class="helper">El primer rol seleccionado quedará como rol principal. Si el usuario queda sin roles, se guardará como Sin rol y quedará inactivo.</div>
         </div>
         <div class="field field--full">
           <label class="check-row">
             <input type="checkbox" name="is_active" value="1" {% if form_data.is_active %}checked{% endif %} {% if not preview_user %}disabled{% endif %}>
-            <span>Usuario activo y habilitado para iniciar sesión</span>
+            <span>Usuario activo y habilitado para iniciar sesión (si queda sin roles, el sistema lo dejará inactivo)</span>
           </label>
         </div>
       </div>

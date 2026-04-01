@@ -6,7 +6,26 @@ from dotenv import load_dotenv
 from flask import Flask, redirect, url_for
 from flask_login import LoginManager, current_user
 
+from services.security import bool_from_value, dev_ssl_context, int_from_value
+from services.roles import has_effective_role, normalize_roles
+
 load_dotenv()
+
+DEFAULT_SUPPORT_SENDER = "sistemas@qualitascolombia.com.co"
+for _sender_key in (
+    "MAIL_DEFAULT_SENDER",
+    "MAIL_FROM",
+    "SMTP_FROM",
+    "SMTP_SENDER",
+    "EMAIL_FROM",
+    "SUPPORT_EMAIL",
+    "SYSTEM_SUPPORT_EMAIL",
+):
+    os.environ[_sender_key] = DEFAULT_SUPPORT_SENDER
+
+
+def _should_start_background_workers() -> bool:
+    return not bool_from_value(os.getenv("DISABLE_BACKGROUND_WORKERS"), False)
 
 
 def create_app() -> Flask:
@@ -30,13 +49,16 @@ def create_app() -> Flask:
             "SELECT id, display_name, email, role, is_active, job_title, department FROM dbo.users WHERE id = ?",
             (user_id,),
         )
-        if not row or not bool(row.get('is_active', 1)):
+        if not row or not bool(row.get("is_active", 1)):
             return None
         role_rows = select_all(
             "SELECT role FROM dbo.user_roles WHERE user_id = ? ORDER BY role",
             (user_id,),
         )
-        roles = [r.get("role") for r in role_rows if r.get("role")]
+        roles = normalize_roles([r.get("role") for r in role_rows if r.get("role")])
+        effective_roles = roles or ([(row.get("role") or "")] if (row.get("role") or "") else [])
+        if not has_effective_role(effective_roles):
+            return None
         return User(
             row["id"],
             (row.get("display_name") or row["id"]),
@@ -73,6 +95,7 @@ def create_app() -> Flask:
     from blueprints.auth import auth_bp
     from blueprints.cases import cases_bp
     from blueprints.users import users_bp
+
     app.register_blueprint(auth_bp)
     app.register_blueprint(cases_bp)
     app.register_blueprint(users_bp)
@@ -85,13 +108,18 @@ def create_app() -> Flask:
 
     with app.app_context():
         from services.bootstrap import ensure_schema
+        from services.case_automation import run_case_automation
 
         ensure_schema()
+        try:
+            run_case_automation()
+        except Exception:
+            pass
 
     def _bg_ingest_loop():
         from services.email_ingest import ingest_unseen
 
-        interval = int(os.getenv("EMAIL_INGEST_INTERVAL_SECONDS", "60"))
+        interval = int_from_value(os.getenv("EMAIL_INGEST_INTERVAL_SECONDS"), 60)
         while True:
             try:
                 with app.app_context():
@@ -100,15 +128,30 @@ def create_app() -> Flask:
                 pass
             time.sleep(max(10, interval))
 
-    if str(os.getenv("EMAIL_INGEST_BACKGROUND", "false")).lower() in ("1", "true", "yes", "y", "on"):
-        t = threading.Thread(target=_bg_ingest_loop, daemon=True)
-        t.start()
+    def _bg_case_automation_loop():
+        from services.case_automation import run_case_automation
+
+        interval = int_from_value(os.getenv("CASE_AUTOMATION_INTERVAL_SECONDS"), 300)
+        while True:
+            try:
+                with app.app_context():
+                    run_case_automation()
+            except Exception:
+                pass
+            time.sleep(max(30, interval))
+
+    if _should_start_background_workers():
+        if bool_from_value(os.getenv("EMAIL_INGEST_BACKGROUND"), False):
+            threading.Thread(target=_bg_ingest_loop, daemon=True).start()
+        if bool_from_value(os.getenv("CASE_AUTOMATION_BACKGROUND"), True):
+            threading.Thread(target=_bg_case_automation_loop, daemon=True).start()
 
     return app
 
 
 if __name__ == "__main__":
     app = create_app()
-    port = int(os.getenv("PORT", "5020"))
-    debug = os.getenv("DEBUG", "true").lower() in ("1", "true", "yes", "y")
-    app.run(host="0.0.0.0", port=port, debug=debug)
+    port = int_from_value(os.getenv("PORT"), 5020)
+    debug = bool_from_value(os.getenv("DEBUG"), True)
+    ssl_context = dev_ssl_context()
+    app.run(host="0.0.0.0", port=port, debug=debug, ssl_context=ssl_context)

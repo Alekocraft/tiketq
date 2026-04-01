@@ -66,10 +66,12 @@
             <span class="sidebar-link__meta">Resumen</span>
           </a>
 
+          {% if current_user.is_authenticated and current_user.can_access_general_cases() %}
           <a class="sidebar-link {% if request.path.startswith('/cases') and request.path != '/cases/mis-tickets' and request.path != '/mis-tickets' %}active{% endif %}" href="/cases">
             <span class="sidebar-link__label">Casos</span>
             <span class="sidebar-link__meta">Operación general</span>
           </a>
+          {% endif %}
 
           <a class="sidebar-link {% if request.path in ['/mis-tickets', '/cases/mis-tickets'] %}active{% endif %}" href="/mis-tickets">
             <span class="sidebar-link__label">Mis tickets</span>
@@ -90,7 +92,7 @@
           </a>
 
           {% if current_user.is_authenticated and current_user.has_role('administrador') %}
-          <a class="sidebar-link {% if request.path.startswith('/admin/users') %}active{% endif %}" href="{{ url_for('cases.admin_users') }}">
+          <a class="sidebar-link {% if request.path.startswith('/admin/users') %}active{% endif %}" href="{{ url_for('users.list_users') }}">
             <span class="sidebar-link__label">Usuarios</span>
             <span class="sidebar-link__meta">Accesos y roles</span>
           </a>

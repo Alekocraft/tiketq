@@ -20,91 +20,70 @@
         </div>
       </div>
 
-      <div class="case-actions-wrap {% if can_triage and (can_resolve or can_close or can_reopen) %}case-actions-wrap--split{% endif %}">
-        {% if can_triage %}
-          <section class="case-mini-panel">
-            <h3>Reasignar o escalar</h3>
-            <form method="post" action="{{ url_for('cases.triage_case', case_id=c['id']) }}" class="action-form action-form--compact">
-              <div class="compact-grid compact-grid--2">
-                <div>
-                  <label for="assigned_team">Destino</label>
-                  <select id="assigned_team" name="assigned_team" required>
-                    <option value="">Selecciona un destino</option>
-                    {% for team in triage_teams %}
-                      <option value="{{ team['key'] }}" {% if c['assigned_team'] == team['key'] %}selected{% endif %}>{{ team['label'] }}</option>
-                    {% endfor %}
-                  </select>
-                </div>
-                <div>
-                  <label for="priority">Prioridad</label>
-                  <select id="priority" name="priority" required>
-                    <option value="">Selecciona prioridad</option>
-                    {% for option in priority_choices %}
-                      <option value="{{ option['key'] }}" {% if c['priority'] == option['key'] %}selected{% endif %}>{{ option['label'] }} · {{ option['response_min'] // 60 }}h / {{ option['resolution_min'] // 60 }}h</option>
-                    {% endfor %}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label for="triage_note">Nota de reasignación</label>
-                <textarea id="triage_note" name="note" rows="3" placeholder="Contexto del cambio de cola"></textarea>
-              </div>
-              <div class="action-row action-row--end">
-                <button class="btn btn-secondary btn-sm" type="submit">Guardar cambio</button>
-              </div>
-            </form>
-          </section>
-        {% endif %}
 
-        {% if can_resolve or can_close or can_reopen %}
-          <section class="case-mini-panel">
-            <h3>Cambiar estado</h3>
-            <div class="status-actions-stack status-actions-stack--compact">
-              {% if can_resolve %}
-                <form method="post" action="{{ url_for('cases.change_case_status', case_id=c['id']) }}" class="action-form action-form--compact status-action-card">
-                  <input type="hidden" name="action" value="resolve">
-                  <div class="status-action-card__head">
-                    <strong>Marcar como resuelto</strong>
-                    <span class="muted">Finaliza la atención operativa.</span>
-                  </div>
-                  <textarea id="resolve_note" name="note" rows="3" placeholder="Describe la solución aplicada" required></textarea>
-                  <div class="action-row action-row--end">
-                    <button class="btn btn-primary btn-sm" type="submit">Resolver</button>
-                  </div>
-                </form>
-              {% endif %}
-
-              {% if can_close %}
-                <form method="post" action="{{ url_for('cases.change_case_status', case_id=c['id']) }}" class="action-form action-form--compact status-action-card">
-                  <input type="hidden" name="action" value="close">
-                  <div class="status-action-card__head">
-                    <strong>Cerrar caso</strong>
-                    <span class="muted">Lo retira de la bandeja operativa.</span>
-                  </div>
-                  <textarea id="close_note" name="note" rows="3" placeholder="Confirma el cierre del caso" required></textarea>
-                  <div class="action-row action-row--end">
-                    <button class="btn btn-secondary btn-sm" type="submit">Cerrar</button>
-                  </div>
-                </form>
-              {% endif %}
-
-              {% if can_reopen %}
-                <form method="post" action="{{ url_for('cases.change_case_status', case_id=c['id']) }}" class="action-form action-form--compact status-action-card">
-                  <input type="hidden" name="action" value="reopen">
-                  <div class="status-action-card__head">
-                    <strong>Reabrir caso</strong>
-                    <span class="muted">Devuelve el caso al flujo operativo.</span>
-                  </div>
-                  <textarea id="reopen_note" name="note" rows="3" placeholder="Indica el motivo de reapertura" required></textarea>
-                  <div class="action-row action-row--end">
-                    <button class="btn btn-ghost btn-sm" type="submit">Reabrir</button>
-                  </div>
-                </form>
-              {% endif %}
-            </div>
-          </section>
-        {% endif %}
+<div class="case-actions-wrap">
+  <section class="case-mini-panel">
+    <h3>Gestionar caso</h3>
+    <form method="post" action="{{ url_for('cases.manage_case', case_id=c['id']) }}" class="action-form action-form--compact" enctype="multipart/form-data" id="caseActionForm">
+      <div>
+        <label for="operation">Acción</label>
+        <select id="operation" name="operation" required>
+          <option value="">Selecciona una acción</option>
+          {% if can_triage %}
+            <option value="triage">Reasignar o escalar</option>
+          {% endif %}
+          {% if can_resolve %}
+            <option value="resolve">Marcar como resuelto</option>
+            <option value="wait_user">En espera de usuario</option>
+          {% endif %}
+          {% if can_close %}
+            <option value="close">Cerrar caso</option>
+          {% endif %}
+          {% if can_reopen %}
+            <option value="reopen">Reabrir caso</option>
+          {% endif %}
+        </select>
       </div>
+
+      <div id="triageFields" style="display:none;">
+        <div class="compact-grid compact-grid--2">
+          <div>
+            <label for="assigned_team">Destino</label>
+            <select id="assigned_team" name="assigned_team">
+              <option value="">Selecciona un destino</option>
+              {% for team in triage_teams %}
+                <option value="{{ team['key'] }}" {% if c['assigned_team'] == team['key'] %}selected{% endif %}>{{ team['label'] }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label for="priority">Prioridad</label>
+            <select id="priority" name="priority">
+              <option value="">Selecciona prioridad</option>
+              {% for option in priority_choices %}
+                <option value="{{ option['key'] }}" {% if c['priority'] == option['key'] %}selected{% endif %}>{{ option['label'] }} · {{ option['response_min'] // 60 }}h / {{ option['resolution_min'] // 60 }}h</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <label for="case_action_note" id="caseActionNoteLabel">Observación</label>
+        <textarea id="case_action_note" name="note" rows="3" placeholder="Escribe la observación o detalle de la gestión"></textarea>
+      </div>
+
+      <div>
+        <label for="case_action_attachments">Adjuntos opcionales</label>
+        <input id="case_action_attachments" type="file" name="attachments" multiple>
+      </div>
+
+      <div class="action-row action-row--end">
+        <button class="btn btn-primary btn-sm" type="submit">Guardar gestión</button>
+      </div>
+    </form>
+  </section>
+</div>
     </section>
 
     <section class="case-block">
@@ -168,13 +147,27 @@
             </div>
           </div>
 
+          {% if latest_survey %}
+            <div class="info-group">
+              <h3>Encuesta de satisfacción</h3>
+              <div class="detail-list detail-list--stacked detail-list--soft">
+                <div><span>Enviada</span><strong>{{ latest_survey['sent_at_display'] }}</strong></div>
+                <div><span>Calificación</span><strong>{% if latest_survey['rating'] %}{{ latest_survey['rating'] }}/5{% else %}Pendiente{% endif %}</strong></div>
+                <div><span>Respondida</span><strong>{{ latest_survey['completed_at_display'] }}</strong></div>
+                {% if latest_survey['reason'] %}
+                  <div><span>Motivo</span><strong>{{ latest_survey['reason'] }}</strong></div>
+                {% endif %}
+              </div>
+            </div>
+          {% endif %}
+
           <div class="info-group">
             <h3>Adjuntos</h3>
             {% if atts %}
               <ul class="attachment-list attachment-list--stacked attachment-list--soft">
                 {% for a in atts %}
                   <li>
-                    <a href="{{ url_for('cases.download_attachment', case_id=c['id'], filename=a['filename']) }}">{{ a['filename'] }}</a>
+                    <a href="{{ url_for('cases.download_attachment_by_id', case_id=c['id'], attachment_id=a['id']) }}">{{ a['filename'] }}</a>
                     <span class="muted">{{ a['size_bytes'] or 0 }} bytes</span>
                   </li>
                 {% endfor %}
@@ -204,6 +197,16 @@
                   <div class="timeline-entry">
                     <div class="timeline-entry__title">{{ item['author_name'] or 'Sistema' }} · {{ item['created_at'] }}</div>
                     <div class="timeline-entry__body">{{ item['message'] }}</div>
+                    {% if item['attachments'] %}
+                      <ul class="attachment-list attachment-list--stacked attachment-list--soft" style="margin-top:0.75rem;">
+                        {% for a in item['attachments'] %}
+                          <li>
+                            <a href="{{ url_for('cases.download_attachment_by_id', case_id=c['id'], attachment_id=a['id']) }}">{{ a['filename'] }}</a>
+                            <span class="muted">{{ a['size_bytes'] or 0 }} bytes</span>
+                          </li>
+                        {% endfor %}
+                      </ul>
+                    {% endif %}
                   </div>
                 {% endfor %}
               </div>
@@ -215,4 +218,51 @@
       </div>
     </section>
   </div>
+
+<script>
+(function () {
+  const actionSelect = document.getElementById('operation');
+  const triageFields = document.getElementById('triageFields');
+  const assignedTeam = document.getElementById('assigned_team');
+  const priority = document.getElementById('priority');
+  const note = document.getElementById('case_action_note');
+  const noteLabel = document.getElementById('caseActionNoteLabel');
+
+  function refreshCaseActionUI() {
+    const action = (actionSelect && actionSelect.value) || '';
+    const isTriage = action === 'triage';
+    const noteRequired = ['resolve', 'wait_user', 'close', 'reopen'].includes(action);
+
+    if (triageFields) triageFields.style.display = isTriage ? '' : 'none';
+    if (assignedTeam) assignedTeam.required = isTriage;
+    if (priority) priority.required = isTriage;
+
+    if (note) {
+      note.required = noteRequired;
+      if (action === 'wait_user') {
+        note.placeholder = 'Observación obligatoria para dejar el caso en espera de usuario';
+      } else if (action === 'resolve') {
+        note.placeholder = 'Describe la solución aplicada';
+      } else if (action === 'triage') {
+        note.placeholder = 'Contexto del cambio de cola o escalamiento';
+      } else if (action === 'close') {
+        note.placeholder = 'Confirma el cierre del caso';
+      } else if (action === 'reopen') {
+        note.placeholder = 'Indica el motivo de reapertura';
+      } else {
+        note.placeholder = 'Escribe la observación o detalle de la gestión';
+      }
+    }
+    if (noteLabel) {
+      noteLabel.textContent = action === 'wait_user' ? 'Observación obligatoria' : 'Observación';
+    }
+  }
+
+  if (actionSelect) {
+    actionSelect.addEventListener('change', refreshCaseActionUI);
+    refreshCaseActionUI();
+  }
+})();
+</script>
+
 {% endblock %}

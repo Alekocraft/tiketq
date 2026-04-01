@@ -7,9 +7,48 @@
       <p>Vista consolidada para {{ scope_labels|join(', ') if scope_labels else 'tu perfil actual' }}.</p>
     </div>
     <div class="hero-panel__actions">
-      <a class="btn btn-secondary" href="{{ url_for('cases.reports_export', kind='summary') }}">Exportar resumen CSV</a>
-      <a class="btn btn-ghost" href="{{ url_for('cases.reports_export', kind='cases') }}">Exportar casos CSV</a>
-      <a class="btn btn-ghost" href="{{ url_for('cases.reports_export', kind='closed', closed_case_id=closed_case_id) }}">Exportar cerrados CSV</a>
+      <a class="btn btn-secondary" href="{{ url_for('cases.reports_export', kind='summary', format='xlsx', date_from=date_from, date_to=date_to, closed_case_id=closed_case_id) }}">Resumen Excel</a>
+      <a class="btn btn-ghost" href="{{ url_for('cases.reports_export', kind='summary', format='pdf', date_from=date_from, date_to=date_to, closed_case_id=closed_case_id) }}">Resumen PDF</a>
+      <a class="btn btn-ghost" href="{{ url_for('cases.reports_export', kind='cases', format='xlsx', date_from=date_from, date_to=date_to, closed_case_id=closed_case_id) }}">Casos Excel</a>
+      <a class="btn btn-ghost" href="{{ url_for('cases.reports_export', kind='cases', format='pdf', date_from=date_from, date_to=date_to, closed_case_id=closed_case_id) }}">Casos PDF</a>
+      <a class="btn btn-ghost" href="{{ url_for('cases.reports_export', kind='closed', format='xlsx', date_from=date_from, date_to=date_to, closed_case_id=closed_case_id) }}">Cerrados Excel</a>
+      <a class="btn btn-ghost" href="{{ url_for('cases.reports_export', kind='closed', format='pdf', date_from=date_from, date_to=date_to, closed_case_id=closed_case_id) }}">Cerrados PDF</a>
+      <a class="btn btn-ghost" href="{{ url_for('cases.reports_export', kind='survey_summary', format='xlsx', date_from=date_from, date_to=date_to) }}">Encuesta Excel</a>
+      <a class="btn btn-ghost" href="{{ url_for('cases.reports_export', kind='survey_summary', format='pdf', date_from=date_from, date_to=date_to) }}">Encuesta PDF</a>
+      <a class="btn btn-ghost" href="{{ url_for('cases.reports_export', kind='survey_detail', format='xlsx', date_from=date_from, date_to=date_to) }}">Detalle encuesta Excel</a>
+      <a class="btn btn-ghost" href="{{ url_for('cases.reports_export', kind='survey_detail', format='pdf', date_from=date_from, date_to=date_to) }}">Detalle encuesta PDF</a>
+    </div>
+  </section>
+
+  <section class="panel-card">
+    <div class="section-head section-head--tight">
+      <div>
+        <h2>Filtros del reporte</h2>
+        <p>El rango se aplica por fecha de creación para el resumen y por fecha de cierre para el reporte de cerrados.</p>
+      </div>
+    </div>
+    <form method="get" class="filter-grid filter-grid--closed-report">
+      <div>
+        <label for="date_from">Fecha inicial</label>
+        <input id="date_from" type="date" name="date_from" value="{{ date_from }}" required>
+      </div>
+      <div>
+        <label for="date_to">Fecha final</label>
+        <input id="date_to" type="date" name="date_to" value="{{ date_to }}" required>
+      </div>
+      <div>
+        <label for="closed_case_id">Caso cerrado específico</label>
+        <input id="closed_case_id" name="closed_case_id" value="{{ closed_case_id }}" placeholder="Q-2026-00024" />
+      </div>
+      <div class="table-actions">
+        <button class="btn btn-primary" type="submit">Actualizar reporte</button>
+      </div>
+    </form>
+    <div class="empty-state" style="margin-top: 1rem; text-align: left;">
+      <div class="empty-state__title">Límites de seguridad de consulta</div>
+      <p class="muted">Rango por defecto: {{ report_limits.default_days }} días. Rango máximo: {{ report_limits.max_days }} días.</p>
+      <p class="muted">Exportación detalle: máximo {{ report_limits.max_export_rows }} filas en Excel y {{ report_limits.max_pdf_rows }} filas en PDF.</p>
+      <p class="muted">Las exportaciones mantienen el mismo alcance y permisos del usuario autenticado.</p>
     </div>
   </section>
 
@@ -42,8 +81,186 @@
     <article class="metric-card">
       <span class="metric-card__label">Cerrados</span>
       <strong class="metric-card__value">{{ totals.get('closed_cases', 0) or 0 }}</strong>
-      <span class="metric-card__meta">Fuera de la vista operativa</span>
+      <span class="metric-card__meta">Total visibles en el rango</span>
     </article>
+  </section>
+
+  <section class="metric-grid metric-grid--4">
+    <article class="metric-card">
+      <span class="metric-card__label">Filas exportables de casos</span>
+      <strong class="metric-card__value">{{ cases_count }}</strong>
+      <span class="metric-card__meta">Se usa para detalle y control de volumen</span>
+    </article>
+    <article class="metric-card">
+      <span class="metric-card__label">Filas exportables de cerrados</span>
+      <strong class="metric-card__value">{{ closed_count }}</strong>
+      <span class="metric-card__meta">Se calcula por fecha de cierre</span>
+    </article>
+    <article class="metric-card">
+      <span class="metric-card__label">Filas exportables de encuestas</span>
+      <strong class="metric-card__value">{{ survey_count }}</strong>
+      <span class="metric-card__meta">Mismo alcance visible del usuario autenticado</span>
+    </article>
+    <article class="metric-card">
+      <span class="metric-card__label">Rango activo</span>
+      <strong class="metric-card__value">{{ date_from }}</strong>
+      <span class="metric-card__meta">hasta {{ date_to }}</span>
+    </article>
+  </section>
+
+  <section class="metric-grid metric-grid--6">
+    <article class="metric-card">
+      <span class="metric-card__label">Encuestas visibles</span>
+      <strong class="metric-card__value">{{ survey_totals.get('total_surveys', 0) or 0 }}</strong>
+      <span class="metric-card__meta">Dentro de tu alcance</span>
+    </article>
+    <article class="metric-card">
+      <span class="metric-card__label">Enviadas</span>
+      <strong class="metric-card__value">{{ survey_totals.get('sent_surveys', 0) or 0 }}</strong>
+      <span class="metric-card__meta">Notificaciones emitidas</span>
+    </article>
+    <article class="metric-card">
+      <span class="metric-card__label">Respondidas</span>
+      <strong class="metric-card__value">{{ survey_totals.get('completed_surveys', 0) or 0 }}</strong>
+      <span class="metric-card__meta">Encuestas completadas</span>
+    </article>
+    <article class="metric-card">
+      <span class="metric-card__label">Pendientes</span>
+      <strong class="metric-card__value">{{ survey_totals.get('pending_surveys', 0) or 0 }}</strong>
+      <span class="metric-card__meta">Sin respuesta aún</span>
+    </article>
+    <article class="metric-card">
+      <span class="metric-card__label">Promedio</span>
+      <strong class="metric-card__value">{{ '%.2f'|format(survey_totals.get('avg_rating', 0) or 0) }}</strong>
+      <span class="metric-card__meta">Sobre 5 puntos</span>
+    </article>
+    <article class="metric-card">
+      <span class="metric-card__label">Calificación baja</span>
+      <strong class="metric-card__value">{{ survey_totals.get('low_ratings', 0) or 0 }}</strong>
+      <span class="metric-card__meta">Notas 1 y 2</span>
+    </article>
+  </section>
+
+  <section class="report-grid">
+    <article class="panel-card">
+      <div class="section-head section-head--tight">
+        <div>
+          <h2>Satisfacción por calificación</h2>
+          <p>Distribución de respuestas entre 1 y 5 dentro del rango seleccionado.</p>
+        </div>
+      </div>
+      {% if survey_by_rating %}
+      <div class="table-wrap">
+        <table class="table table--clean">
+          <thead>
+            <tr>
+              <th>Calificación</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in survey_by_rating %}
+            <tr>
+              <td>{{ row['rating'] }}</td>
+              <td>{{ row['total_surveys'] or 0 }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <div class="empty-state__title">Sin respuestas registradas</div>
+        <p class="muted">No hay encuestas calificadas en el rango visible.</p>
+      </div>
+      {% endif %}
+    </article>
+
+    <article class="panel-card">
+      <div class="section-head section-head--tight">
+        <div>
+          <h2>Satisfacción por equipo</h2>
+          <p>Se respeta el mismo alcance visible por roles y permisos.</p>
+        </div>
+      </div>
+      {% if survey_by_team %}
+      <div class="table-wrap">
+        <table class="table table--clean">
+          <thead>
+            <tr>
+              <th>Equipo</th>
+              <th>Encuestas</th>
+              <th>Respondidas</th>
+              <th>Promedio</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in survey_by_team %}
+            <tr>
+              <td>{{ row['assigned_team'] or 'Sin equipo' }}</td>
+              <td>{{ row['total_surveys'] or 0 }}</td>
+              <td>{{ row['completed_surveys'] or 0 }}</td>
+              <td>{{ '%.2f'|format(row['avg_rating'] or 0) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <div class="empty-state__title">Sin datos por equipo</div>
+        <p class="muted">No hay encuestas visibles para este rango.</p>
+      </div>
+      {% endif %}
+    </article>
+  </section>
+
+  <section class="panel-card">
+    <div class="section-head section-head--tight">
+      <div>
+        <h2>Detalle reciente de encuestas</h2>
+        <p>Vista previa de hasta 50 registros. Para el detalle completo usa la exportación en Excel o PDF.</p>
+      </div>
+    </div>
+    {% if survey_rows %}
+    <div class="table-wrap table-wrap--compact">
+      <table class="table table--clean table--cases">
+        <thead>
+          <tr>
+            <th>Encuesta</th>
+            <th>Caso</th>
+            <th>Equipo</th>
+            <th>Asignado</th>
+            <th>Correo</th>
+            <th>Enviada</th>
+            <th>Respondida</th>
+            <th>Calificación</th>
+            <th>Motivo</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in survey_rows %}
+          <tr>
+            <td>{{ row['survey_id'] }}</td>
+            <td class="cell-id"><strong>{{ row['case_id'] }}</strong></td>
+            <td>{{ row['assigned_team_label'] or '-' }}</td>
+            <td>{{ row['assigned_to_name'] or '-' }}</td>
+            <td>{{ row['recipient_email'] or '-' }}</td>
+            <td class="cell-nowrap">{{ row['sent_at_display'] or '-' }}</td>
+            <td class="cell-nowrap">{{ row['completed_at_display'] or '-' }}</td>
+            <td>{{ row['rating_display'] }}</td>
+            <td>{{ row['reason'] or '-' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <div class="empty-state__title">Sin encuestas para mostrar</div>
+      <p class="muted">Cuando existan envíos o respuestas visibles en el rango, aparecerán aquí.</p>
+    </div>
+    {% endif %}
   </section>
 
   <section class="report-grid">
@@ -195,19 +412,10 @@
   <section class="panel-card">
     <div class="section-head section-head--tight">
       <div>
-        <h2>Reporte de cerrados</h2>
-        <p>Consulta casos cerrados por número de caso. No aparecen en la vista operativa.</p>
+        <h2>Consulta rápida de cerrados</h2>
+        <p>Si indicas un número de caso, se muestran hasta 100 registros visibles para validación rápida. Para llevar todo el detalle usa la exportación.</p>
       </div>
     </div>
-    <form method="get" class="filter-grid filter-grid--closed-report">
-      <div>
-        <label for="closed_case_id">Número de caso</label>
-        <input id="closed_case_id" name="closed_case_id" value="{{ closed_case_id }}" placeholder="Q-2026-00024" />
-      </div>
-      <div class="table-actions">
-        <button class="btn btn-primary" type="submit">Consultar cerrados</button>
-      </div>
-    </form>
 
     {% if closed_case_id %}
       {% if closed_cases %}
@@ -228,8 +436,8 @@
             {% for row in closed_cases %}
             <tr>
               <td class="cell-id"><strong>{{ row['id'] }}</strong></td>
-              <td class="cell-nowrap">{{ row['closed_at'] or '-' }}</td>
-              <td>{{ row['assigned_team'] or '-' }}</td>
+              <td class="cell-nowrap">{{ row['closed_at_display'] or '-' }}</td>
+              <td>{{ row['assigned_team_label'] or '-' }}</td>
               <td>{{ row['assigned_to_name'] or '-' }}</td>
               <td>{{ row['requester_email'] or row['requester_name'] or '-' }}</td>
               <td>{{ row['subject'] or '-' }}</td>
@@ -241,16 +449,15 @@
       </div>
       {% else %}
       <div class="empty-state">
-        <div class="empty-state__title">No hay cerrados para ese número de caso</div>
-        <p class="muted">Verifica el identificador y vuelve a consultar.</p>
+        <div class="empty-state__title">No hay cerrados para ese filtro</div>
+        <p class="muted">Verifica el identificador y el rango de fechas.</p>
       </div>
       {% endif %}
     {% else %}
       <div class="empty-state">
-        <div class="empty-state__title">Ingresa un número de caso</div>
-        <p class="muted">La consulta de cerrados se hace únicamente por número de caso.</p>
+        <div class="empty-state__title">Consulta opcional</div>
+        <p class="muted">Puedes exportar todos los cerrados del rango o filtrar un caso específico para revisión rápida.</p>
       </div>
     {% endif %}
   </section>
-
 {% endblock %}

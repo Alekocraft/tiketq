@@ -4,7 +4,7 @@ from flask_login import current_user, login_user, logout_user
 from models.user import User
 from services.db import commit, execute, select_all, select_one
 from services.ldap_auth import authenticate, test_connection
-from services.roles import normalize_role, normalize_roles
+from services.roles import has_effective_role, normalize_role, normalize_roles
 
 
 auth_bp = Blueprint("auth", __name__, url_prefix="")
@@ -31,11 +31,12 @@ def _upsert_user(user: User):
     stored_primary = normalize_role((row or {}).get("role") or "")
     current_roles = _load_roles(user.username)
     primary_role = current_roles[0] if current_roles else stored_primary
+    effective_active = bool((row or {}).get("is_active", 1)) and has_effective_role(current_roles or ([primary_role] if primary_role else []))
 
     execute(
         """
         MERGE dbo.users AS target
-        USING (SELECT ? AS id, ? AS display_name, ? AS email, ? AS job_title, ? AS department) AS src
+        USING (SELECT ? AS id, ? AS display_name, ? AS email, ? AS job_title, ? AS department, ? AS role, ? AS is_active) AS src
         ON target.id = src.id
         WHEN MATCHED THEN
             UPDATE SET
@@ -43,10 +44,12 @@ def _upsert_user(user: User):
                 email = src.email,
                 job_title = src.job_title,
                 department = src.department,
+                role = src.role,
+                is_active = src.is_active,
                 updated_at = SYSDATETIME()
         WHEN NOT MATCHED THEN
             INSERT (id, display_name, email, job_title, department, role, is_active, created_at, updated_at)
-            VALUES (src.id, src.display_name, src.email, src.job_title, src.department, ?, 1, SYSDATETIME(), SYSDATETIME());
+            VALUES (src.id, src.display_name, src.email, src.job_title, src.department, src.role, src.is_active, SYSDATETIME(), SYSDATETIME());
         """,
         (
             user.username,
@@ -55,13 +58,15 @@ def _upsert_user(user: User):
             user.job_title,
             user.department,
             primary_role or "sin_rol",
+            1 if effective_active else 0,
         ),
     )
     commit()
 
     latest_roles = _load_roles(user.username)
     user.roles = latest_roles
-    user.role = latest_roles[0] if latest_roles else (primary_role or "")
+    user.role = latest_roles[0] if latest_roles else (primary_role or "sin_rol")
+    user.active = effective_active
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])
@@ -107,6 +112,11 @@ def login():
                 return render_template("auth/login.html")
             else:
                 _upsert_user(user)
+                if not user.is_active or not has_effective_role(user.roles or ([user.role] if user.role else [])):
+                    execute("UPDATE dbo.users SET role = 'sin_rol', is_active = 0, updated_at = SYSDATETIME() WHERE id = ?", (user.username,))
+                    commit()
+                    flash("Tu usuario no tiene roles asignados y quedó inactivo. Contacta al administrador.", "error")
+                    return render_template("auth/login.html")
 
             login_user(user)
             session["user_display_name"] = info.get("display_name") or user.display_name

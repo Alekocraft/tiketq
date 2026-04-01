@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from flask_login import UserMixin
 
-from services.roles import can_ingest, can_triage, normalize_role, normalize_roles, role_label
+from services.roles import can_access_general_cases, can_ingest, can_triage, has_effective_role, normalize_role, normalize_roles, role_label
 
 
 class User(UserMixin):
@@ -33,7 +33,7 @@ class User(UserMixin):
 
     @property
     def is_active(self) -> bool:
-        return self.active
+        return bool(self.active) and has_effective_role(self.roles or ([self.role] if self.role else []))
 
     @property
     def id(self) -> str:
@@ -62,3 +62,6 @@ class User(UserMixin):
 
     def can_triage(self) -> bool:
         return can_triage(self.roles)
+
+    def can_access_general_cases(self) -> bool:
+        return can_access_general_cases(self.roles)

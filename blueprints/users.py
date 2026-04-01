@@ -7,7 +7,7 @@ from flask_login import current_user, login_required
 
 from services.db import commit, execute, rollback, select_all, select_one
 from services.ldap_auth import search_user
-from services.roles import is_admin, normalize_role, normalize_roles, role_choices, role_label
+from services.roles import has_effective_role, is_admin, normalize_role, normalize_roles, role_choices, role_label
 
 users_bp = Blueprint("users", __name__, url_prefix="")
 
@@ -147,6 +147,7 @@ def _save_roles(user_id: str, roles: list[str]) -> None:
 
 def _sync_or_create_user(user_id: str, payload: dict, roles: list[str], active: bool) -> None:
     primary_role = roles[0] if roles else "sin_rol"
+    effective_active = bool(active) and has_effective_role(roles or ([primary_role] if primary_role else []))
     execute(
         """
         MERGE dbo.users AS target
@@ -181,7 +182,7 @@ def _sync_or_create_user(user_id: str, payload: dict, roles: list[str], active: 
             payload.get("job_title") or "",
             payload.get("department") or "",
             primary_role,
-            1 if active else 0,
+            1 if effective_active else 0,
         ),
     )
     _save_roles(user_id, roles)
@@ -250,17 +251,17 @@ def create_user():
                 }
 
                 if action == "save":
-                    if not selected_roles:
-                        flash("Selecciona al menos un rol.", "error")
-                    else:
-                        try:
-                            _sync_or_create_user(info.get("username") or username_value, form_data, selected_roles, form_data["is_active"])
-                            commit()
+                    try:
+                        _sync_or_create_user(info.get("username") or username_value, form_data, selected_roles, form_data["is_active"])
+                        commit()
+                        if has_effective_role(selected_roles):
                             flash("Usuario creado y autorizado correctamente.", "success")
-                            return redirect(url_for("users.edit_user", user_id=info.get("username") or username_value))
-                        except Exception as exc:
-                            rollback()
-                            flash(f"No fue posible crear el usuario: {exc}", "error")
+                        else:
+                            flash("Usuario creado sin roles. Quedó inactivo hasta que se le asigne al menos un rol.", "success")
+                        return redirect(url_for("users.edit_user", user_id=info.get("username") or username_value))
+                    except Exception as exc:
+                        rollback()
+                        flash(f"No fue posible crear el usuario: {exc}", "error")
 
     return render_template(
         "admin/users_create.html",
@@ -305,16 +306,18 @@ def edit_user(user_id: str):
         else:
             roles = normalize_roles(request.form.getlist("roles"))
             active = _is_truthy(request.form.get("is_active"))
-            if not roles:
-                flash("Selecciona al menos un rol.", "error")
-            elif user_id == current_user.username and not active:
-                flash("No puedes desactivar tu propio usuario mientras estás autenticado.", "error")
+            effective_active = bool(active) and has_effective_role(roles)
+            if user_id == current_user.username and not effective_active:
+                flash("No puedes dejar tu propio usuario sin roles o inactivo mientras estás autenticado.", "error")
             else:
                 try:
                     payload = _manual_payload_from_form(user_id)
                     _sync_or_create_user(user_id, payload, roles, active)
                     commit()
-                    flash("Usuario actualizado correctamente.", "success")
+                    if has_effective_role(roles):
+                        flash("Usuario actualizado correctamente.", "success")
+                    else:
+                        flash("Usuario actualizado sin roles. Quedó inactivo hasta que se le asigne al menos un rol.", "success")
                     return redirect(url_for("users.edit_user", user_id=user_id))
                 except Exception as exc:
                     rollback()
@@ -346,6 +349,13 @@ def deactivate_user(user_id: str):
 @users_bp.route("/admin/users/<user_id>/reactivate", methods=["POST"])
 @admin_required
 def reactivate_user(user_id: str):
+    user = _load_user(user_id)
+    if not user:
+        flash("El usuario no existe.", "error")
+        return redirect(request.referrer or url_for("users.list_users"))
+    if not has_effective_role(user.get("roles", [])):
+        flash("No se puede reactivar un usuario sin roles. Asígnale al menos un rol primero.", "error")
+        return redirect(request.referrer or url_for("users.edit_user", user_id=user_id))
     execute("UPDATE dbo.users SET is_active = 1, updated_at = SYSDATETIME() WHERE id = ?", (user_id,))
     commit()
     flash("Usuario reactivado.", "success")
