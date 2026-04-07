@@ -1,126 +1,117 @@
-import os
-from datetime import date, datetime, timedelta
+from __future__ import annotations
 
-from services.db import select_all
-from services.security import int_from_value, text_value
+from datetime import datetime, timedelta, time
 
-PRIORITY_DEFAULTS = {
-    "ALTA": (60, 480),    # respuesta 1h, resolución 8h
-    "MEDIA": (240, 960),  # respuesta 4h, resolución 16h
-    "BAJA": (480, 2880),  # respuesta 8h, resolución 48h
+BUSINESS_START_HOUR = 8
+BUSINESS_END_HOUR = 18
+BUSINESS_MINUTES_PER_DAY = (BUSINESS_END_HOUR - BUSINESS_START_HOUR) * 60
+
+_PRIORITY_DEFAULTS = {
+    'P1': (60, 240),
+    'P2': (120, 1440),
+    'P3': (240, 2880),
+    'P4': (480, 4320),
+    'ALTA': (60, 240),
+    'MEDIA': (240, 2880),
+    'BAJA': (480, 4320),
 }
 
-_PRIORITY_MAP = {
-    "P1": "ALTA",
-    "ALTA": "ALTA",
-    "HIGH": "ALTA",
-    "P2": "MEDIA",
-    "P3": "MEDIA",
-    "MEDIA": "MEDIA",
-    "MEDIUM": "MEDIA",
-    "P4": "BAJA",
-    "BAJA": "BAJA",
-    "LOW": "BAJA",
+_PRIORITY_ALIASES = {
+    'CRITICA': 'P1',
+    'CRÍTICA': 'P1',
+    'URGENTE': 'P1',
+    'HIGH': 'ALTA',
+    'MEDIUM': 'MEDIA',
+    'LOW': 'BAJA',
 }
 
-BUSINESS_START_HOUR = int_from_value(os.getenv("SLA_BUSINESS_START_HOUR"), 7)
-BUSINESS_END_HOUR = int_from_value(os.getenv("SLA_BUSINESS_END_HOUR"), 19)
-BUSINESS_DAY_MINUTES = max(60, (BUSINESS_END_HOUR - BUSINESS_START_HOUR) * 60)
 
-
-def normalize_priority(priority_code: str, default: str = "MEDIA") -> str:
-    code = (priority_code or "").strip().upper()
-    return _PRIORITY_MAP.get(code, default)
-
-
-def priority_choices():
+def priority_choices() -> list[dict]:
     return [
-        {"key": "ALTA", "label": "Alta", "response_min": 60, "resolution_min": 480},
-        {"key": "MEDIA", "label": "Media", "response_min": 240, "resolution_min": 960},
-        {"key": "BAJA", "label": "Baja", "response_min": 480, "resolution_min": 2880},
+        {'key': 'P1', 'label': 'P1'},
+        {'key': 'P2', 'label': 'P2'},
+        {'key': 'P3', 'label': 'P3'},
+        {'key': 'P4', 'label': 'P4'},
+        {'key': 'ALTA', 'label': 'Alta'},
+        {'key': 'MEDIA', 'label': 'Media'},
+        {'key': 'BAJA', 'label': 'Baja'},
     ]
 
 
-def get_priority_defaults(priority_code: str):
-    code = normalize_priority(priority_code)
-    return PRIORITY_DEFAULTS.get(code, PRIORITY_DEFAULTS["MEDIA"])
+def normalize_priority(value: str) -> str:
+    raw = (value or '').strip().upper()
+    if not raw:
+        return 'P3'
+    raw = _PRIORITY_ALIASES.get(raw, raw)
+    if raw in _PRIORITY_DEFAULTS:
+        return raw
+    return 'P3'
 
 
-def _load_holiday_dates() -> set[date]:
+def get_priority_defaults(priority: str) -> tuple[int, int]:
+    return _PRIORITY_DEFAULTS.get(normalize_priority(priority), _PRIORITY_DEFAULTS['P3'])
+
+
+def humanize_minutes(total_minutes: int) -> str:
     try:
-        rows = select_all("SELECT holiday_date FROM dbo.holidays WHERE is_active = 1")
+        minutes = int(total_minutes or 0)
     except Exception:
-        return set()
-
-    holidays: set[date] = set()
-    for row in rows:
-        value = row.get("holiday_date")
-        if not value:
-            continue
-        if isinstance(value, datetime):
-            holidays.add(value.date())
-        elif isinstance(value, date):
-            holidays.add(value)
-        else:
-            try:
-                holidays.add(datetime.fromisoformat(text_value(value)[:10]).date())
-            except Exception:
-                continue
-    return holidays
+        minutes = 0
+    if minutes <= 0:
+        return '0 min'
+    days, rem = divmod(minutes, BUSINESS_MINUTES_PER_DAY)
+    hours, mins = divmod(rem, 60)
+    parts: list[str] = []
+    if days:
+        parts.append(f'{days} d')
+    if hours:
+        parts.append(f'{hours} h')
+    if mins:
+        parts.append(f'{mins} min')
+    return ' '.join(parts) if parts else '0 min'
 
 
-def _business_bounds(moment: datetime):
-    start = moment.replace(hour=BUSINESS_START_HOUR, minute=0, second=0, microsecond=0)
-    end = moment.replace(hour=BUSINESS_END_HOUR, minute=0, second=0, microsecond=0)
-    return start, end
+def _business_start(dt: datetime) -> datetime:
+    return dt.replace(hour=BUSINESS_START_HOUR, minute=0, second=0, microsecond=0)
 
 
-def _next_business_start(moment: datetime, holidays: set[date]) -> datetime:
-    current = moment
-    while True:
-        start, end = _business_bounds(current)
-        if current.date() in holidays:
-            current = start + timedelta(days=1)
-            continue
-        if current < start:
-            return start
-        if current >= end:
-            current = start + timedelta(days=1)
-            continue
-        return current
+def _business_end(dt: datetime) -> datetime:
+    return dt.replace(hour=BUSINESS_END_HOUR, minute=0, second=0, microsecond=0)
 
 
-def _add_business_minutes(start_at: datetime, minutes: int, holidays: set[date]) -> datetime:
-    current = _next_business_start(start_at, holidays)
-    remaining = int(minutes or 0)
-    if remaining <= 0:
+def _align_to_business_time(dt: datetime) -> datetime:
+    start = _business_start(dt)
+    end = _business_end(dt)
+    if dt < start:
+        return start
+    if dt >= end:
+        next_day = dt + timedelta(days=1)
+        return _business_start(next_day)
+    return dt.replace(second=0, microsecond=0)
+
+
+def _add_business_minutes(start_at: datetime, minutes: int) -> datetime:
+    remaining = max(int(minutes or 0), 0)
+    current = _align_to_business_time(start_at)
+    if remaining == 0:
         return current
 
     while remaining > 0:
-        _, day_end = _business_bounds(current)
-        available = int((day_end - current).total_seconds() // 60)
-        if remaining <= available:
-            return current + timedelta(minutes=remaining)
-        remaining -= max(0, available)
-        current = _next_business_start(day_end + timedelta(seconds=1), holidays)
-
+        end_of_window = _business_end(current)
+        available = int((end_of_window - current).total_seconds() // 60)
+        if available <= 0:
+            current = _business_start(current + timedelta(days=1))
+            continue
+        step = min(remaining, available)
+        current = current + timedelta(minutes=step)
+        remaining -= step
+        if remaining > 0:
+            current = _business_start(current + timedelta(days=1))
     return current
 
 
-def compute_due_dates(created_at: datetime, response_minutes: int, resolution_minutes: int):
-    base = created_at or datetime.now()
-    holidays = _load_holiday_dates()
-    response_due = _add_business_minutes(base, int(response_minutes or 0), holidays)
-    resolution_due = _add_business_minutes(base, int(resolution_minutes or 0), holidays)
+def compute_due_dates(created_at: datetime, response_minutes: int, resolution_minutes: int) -> tuple[datetime, datetime]:
+    base = created_at if isinstance(created_at, datetime) else datetime.now()
+    response_due = _add_business_minutes(base, int(response_minutes or 0))
+    resolution_due = _add_business_minutes(base, int(resolution_minutes or 0))
     return response_due, resolution_due
-
-
-def humanize_minutes(minutes: int) -> str:
-    minutes = int(minutes or 0)
-    if minutes >= BUSINESS_DAY_MINUTES and minutes % BUSINESS_DAY_MINUTES == 0:
-        days = minutes // BUSINESS_DAY_MINUTES
-        return f"{days} día hábil" if days == 1 else f"{days} días hábiles"
-    if minutes % 60 == 0:
-        hours = minutes // 60
-        return f"{hours} hora" if hours == 1 else f"{hours} horas"
-    return f"{minutes} min"

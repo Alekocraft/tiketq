@@ -1133,6 +1133,44 @@ REPORT_DEFAULT_RANGE_DAYS = 30
 REPORT_MAX_RANGE_DAYS = 180
 REPORT_MAX_EXPORT_ROWS = 5000
 REPORT_MAX_PDF_ROWS = 1000
+REPORT_KIND_CHOICES = [
+    {
+        'key': 'summary',
+        'label': 'Resumen operativo',
+        'description': 'Totales, estado, prioridad, equipos y responsables.',
+    },
+    {
+        'key': 'cases',
+        'label': 'Detalle de casos',
+        'description': 'Listado detallado de tickets con ANS y responsables.',
+    },
+    {
+        'key': 'closed',
+        'label': 'Casos cerrados',
+        'description': 'Consulta cierres por rango con filtro opcional por ID.',
+    },
+    {
+        'key': 'survey_summary',
+        'label': 'Calidad y satisfacción',
+        'description': 'Resumen de encuestas e incluye detalle en PDF y Excel.',
+    },
+    {
+        'key': 'survey_detail',
+        'label': 'Detalle de encuestas',
+        'description': 'Listado completo de respuestas y motivos.',
+    },
+    {
+        'key': 'case_lookup',
+        'label': 'Buscar caso',
+        'description': 'Trae si fue atendido, encuesta de calidad, trazabilidad y adjuntos.',
+    },
+]
+
+
+def _normalize_report_kind(raw_value: str | None) -> str:
+    raw = text_value(raw_value).strip().lower()
+    allowed = {item['key'] for item in REPORT_KIND_CHOICES}
+    return raw if raw in allowed else 'summary'
 
 
 def _parse_report_date(raw_value: str | None):
@@ -1145,7 +1183,7 @@ def _parse_report_date(raw_value: str | None):
         return None
 
 
-def _report_redirect_args(kind: str, date_from: str, date_to: str, closed_case_id: str = '') -> dict:
+def _report_redirect_args(kind: str, date_from: str, date_to: str, closed_case_id: str = '', case_id_query: str = '') -> dict:
     args = {
         'kind': kind,
         'date_from': date_from,
@@ -1153,7 +1191,13 @@ def _report_redirect_args(kind: str, date_from: str, date_to: str, closed_case_i
     }
     if closed_case_id:
         args['closed_case_id'] = closed_case_id
+    if case_id_query:
+        args['case_id_query'] = case_id_query
     return args
+
+
+def _report_kind_choices() -> list[dict]:
+    return [dict(item) for item in REPORT_KIND_CHOICES]
 
 
 def _build_report_filter(kind: str = 'summary') -> dict:
@@ -1164,6 +1208,7 @@ def _build_report_filter(kind: str = 'summary') -> dict:
     raw_from = (request.args.get('date_from') or '').strip()
     raw_to = (request.args.get('date_to') or '').strip()
     closed_case_id = (request.args.get('closed_case_id') or '').strip()
+    case_id_query = (request.args.get('case_id_query') or '').strip()
 
     messages: list[str] = []
     start_date = _parse_report_date(raw_from)
@@ -1196,21 +1241,22 @@ def _build_report_filter(kind: str = 'summary') -> dict:
         filters.append(visibility_sql)
         params.extend(visibility_params)
 
-    date_column = 'c.created_at'
-    if kind == 'closed':
-        date_column = 'ISNULL(c.closed_at, c.updated_at)'
-        filters.append("LOWER(c.status) = 'cerrado'")
+    if kind != 'case_lookup':
+        date_column = 'c.created_at'
+        if kind == 'closed':
+            date_column = 'ISNULL(c.closed_at, c.updated_at)'
+            filters.append("LOWER(c.status) = 'cerrado'")
 
-    start_dt = datetime.combine(start_date, datetime.min.time())
-    end_exclusive = datetime.combine(end_date + timedelta(days=1), datetime.min.time())
-    filters.append(f"{date_column} >= ?")
-    params.append(start_dt)
-    filters.append(f"{date_column} < ?")
-    params.append(end_exclusive)
+        start_dt = datetime.combine(start_date, datetime.min.time())
+        end_exclusive = datetime.combine(end_date + timedelta(days=1), datetime.min.time())
+        filters.append(f"{date_column} >= ?")
+        params.append(start_dt)
+        filters.append(f"{date_column} < ?")
+        params.append(end_exclusive)
 
-    if kind == 'closed' and closed_case_id:
-        filters.append('c.id LIKE ?')
-        params.append(f'%{closed_case_id}%')
+        if kind == 'closed' and closed_case_id:
+            filters.append('c.id LIKE ?')
+            params.append(f'%{closed_case_id}%')
 
     where_clause = 'WHERE ' + ' AND '.join(filters) if filters else ''
     return {
@@ -1218,6 +1264,7 @@ def _build_report_filter(kind: str = 'summary') -> dict:
         'date_from': start_date.isoformat(),
         'date_to': end_date.isoformat(),
         'closed_case_id': closed_case_id,
+        'case_id_query': case_id_query,
         'messages': messages,
         'where_clause': where_clause,
         'params': tuple(params),
@@ -1271,8 +1318,8 @@ def _report_by_priority(filter_ctx: dict) -> list[dict]:
             WHEN 'BAJA' THEN 3
             WHEN 'P1' THEN 1
             WHEN 'P2' THEN 2
-            WHEN 'P3' THEN 2
-            WHEN 'P4' THEN 3
+            WHEN 'P3' THEN 3
+            WHEN 'P4' THEN 4
             ELSE 99 END, c.priority
         """,
         filter_ctx['params'],
@@ -1437,6 +1484,7 @@ def _survey_report_detail_rows(filter_ctx: dict, limit: int | None = None) -> li
         row['completed_at_display'] = _fmt_dt(row.get('completed_at'))
         row['activity_at_display'] = row['completed_at_display'] if row.get('completed_at') else row['sent_at_display']
         row['rating_display'] = row.get('rating') if row.get('rating') is not None else '-'
+        row['survey_status'] = 'Respondida' if row.get('completed_at') else ('Enviada' if row.get('sent_at') else 'Pendiente')
     return rows
 
 
@@ -1474,7 +1522,8 @@ def _report_detail_rows(filter_ctx: dict, limit: int | None = None) -> list[dict
         SELECT {top_sql}c.id, c.status, c.priority, c.assigned_team,
                ISNULL(u.display_name, c.assigned_to) AS assigned_to_name,
                c.requester_name, c.requester_email, c.created_at, c.updated_at, c.subject,
-               c.sla_response_min, c.sla_resolution_min, c.response_due_at, c.resolution_due_at
+               c.sla_response_min, c.sla_resolution_min, c.response_due_at, c.resolution_due_at,
+               c.first_response_at, c.resolved_at, c.closed_at
         FROM dbo.cases c
         LEFT JOIN dbo.users u ON u.id = c.assigned_to
         {filter_ctx['where_clause']}
@@ -1482,14 +1531,140 @@ def _report_detail_rows(filter_ctx: dict, limit: int | None = None) -> list[dict
         """,
         filter_ctx['params'],
     )
-    return [_decorate_case(row) for row in rows]
+    decorated = []
+    for row in rows:
+        row = _decorate_case(row)
+        row['created_at_display'] = _fmt_dt(row.get('created_at'))
+        row['first_response_at_display'] = _fmt_dt(row.get('first_response_at'))
+        row['resolved_at_display'] = _fmt_dt(row.get('resolved_at'))
+        row['closed_at_display'] = _fmt_dt(row.get('closed_at'))
+        decorated.append(row)
+    return decorated
+
+
+def _case_lookup_rows(case_id_query: str) -> list[dict]:
+    query = text_value(case_id_query).strip()
+    if not query:
+        return []
+
+    visibility_sql, visibility_params = _visibility_condition('c')
+    filters: list[str] = []
+    params: list = []
+    if visibility_sql:
+        filters.append(visibility_sql)
+        params.extend(visibility_params)
+    filters.append('c.id LIKE ?')
+    params.append(f'%{query}%')
+    where_clause = 'WHERE ' + ' AND '.join(filters)
+
+    rows = select_all(
+        f"""
+        SELECT c.id, c.subject, c.description, c.status, c.priority, c.assigned_team,
+               c.assigned_to, ISNULL(u.display_name, c.assigned_to) AS assigned_to_name,
+               c.requester_name, c.requester_email,
+               c.created_at, c.updated_at, c.first_response_at, c.resolved_at, c.closed_at,
+               c.sla_response_min, c.sla_resolution_min, c.response_due_at, c.resolution_due_at,
+               (SELECT COUNT(*) FROM dbo.case_updates cu WHERE cu.case_id = c.id) AS updates_count,
+               (SELECT COUNT(*) FROM dbo.case_updates cu WHERE cu.case_id = c.id AND cu.is_solution = 1) AS solution_updates_count,
+               (SELECT COUNT(*) FROM dbo.case_attachments ca WHERE ca.case_id = c.id) AS attachments_count,
+               (SELECT COUNT(*) FROM dbo.case_surveys s WHERE s.case_id = c.id) AS surveys_count,
+               (SELECT TOP 1 s.sent_at FROM dbo.case_surveys s WHERE s.case_id = c.id ORDER BY s.created_at DESC, s.id DESC) AS latest_survey_sent_at,
+               (SELECT TOP 1 s.completed_at FROM dbo.case_surveys s WHERE s.case_id = c.id ORDER BY s.created_at DESC, s.id DESC) AS latest_survey_completed_at,
+               (SELECT TOP 1 s.rating FROM dbo.case_surveys s WHERE s.case_id = c.id ORDER BY s.created_at DESC, s.id DESC) AS latest_survey_rating,
+               (SELECT TOP 1 s.reason FROM dbo.case_surveys s WHERE s.case_id = c.id ORDER BY s.created_at DESC, s.id DESC) AS latest_survey_reason,
+               (SELECT TOP 1 cu.message FROM dbo.case_updates cu WHERE cu.case_id = c.id AND cu.is_solution = 1 ORDER BY cu.created_at DESC, cu.id DESC) AS latest_solution_message
+        FROM dbo.cases c
+        LEFT JOIN dbo.users u ON u.id = c.assigned_to
+        {where_clause}
+        ORDER BY c.created_at DESC
+        """,
+        tuple(params),
+    )
+
+    for row in rows:
+        _decorate_case(row)
+        row['assigned_team_label'] = role_label(row.get('assigned_team') or '') if row.get('assigned_team') else ''
+        row['created_at_display'] = _fmt_dt(row.get('created_at'))
+        row['updated_at_display'] = _fmt_dt(row.get('updated_at'))
+        row['first_response_at_display'] = _fmt_dt(row.get('first_response_at'))
+        row['resolved_at_display'] = _fmt_dt(row.get('resolved_at'))
+        row['closed_at_display'] = _fmt_dt(row.get('closed_at'))
+        row['latest_survey_sent_at_display'] = _fmt_dt(row.get('latest_survey_sent_at'))
+        row['latest_survey_completed_at_display'] = _fmt_dt(row.get('latest_survey_completed_at'))
+        row['was_attended'] = bool(row.get('first_response_at') or row.get('resolved_at') or row.get('closed_at') or int(row.get('updates_count') or 0) > 0)
+        row['has_quality_survey'] = int(row.get('surveys_count') or 0) > 0
+        if row.get('latest_survey_completed_at'):
+            row['survey_status'] = 'Respondida'
+        elif row.get('latest_survey_sent_at'):
+            row['survey_status'] = 'Enviada'
+        else:
+            row['survey_status'] = 'Sin encuesta'
+    return rows
+
+
+def _case_lookup_related(case_id: str) -> dict:
+    updates = select_all(
+        """
+        SELECT TOP 20 id, author_name, author_email, message, is_solution, created_at
+        FROM dbo.case_updates
+        WHERE case_id = ?
+        ORDER BY created_at DESC, id DESC
+        """,
+        (case_id,),
+    )
+    for row in updates:
+        row['created_at_display'] = _fmt_dt(row.get('created_at'))
+
+    surveys = select_all(
+        """
+        SELECT TOP 10 id AS survey_id, recipient_email, sent_at, completed_at, rating, reason, delivery_error, created_at
+        FROM dbo.case_surveys
+        WHERE case_id = ?
+        ORDER BY created_at DESC, id DESC
+        """,
+        (case_id,),
+    )
+    for row in surveys:
+        row['sent_at_display'] = _fmt_dt(row.get('sent_at'))
+        row['completed_at_display'] = _fmt_dt(row.get('completed_at'))
+        row['survey_status'] = 'Respondida' if row.get('completed_at') else ('Enviada' if row.get('sent_at') else 'Pendiente')
+
+    attachments = select_all(
+        """
+        SELECT TOP 20 filename, size_bytes, uploaded_at
+        FROM dbo.case_attachments
+        WHERE case_id = ?
+        ORDER BY uploaded_at DESC, id DESC
+        """,
+        (case_id,),
+    )
+    for row in attachments:
+        row['uploaded_at_display'] = _fmt_dt(row.get('uploaded_at'))
+    return {
+        'updates': updates,
+        'surveys': surveys,
+        'attachments': attachments,
+    }
+
+
+def _build_case_lookup_payload(filter_ctx: dict) -> dict:
+    rows = _case_lookup_rows(filter_ctx.get('case_id_query') or '')
+    selected_case = rows[0] if rows else None
+    related = {'updates': [], 'surveys': [], 'attachments': []}
+    if selected_case:
+        related = _case_lookup_related(selected_case['id'])
+    return {
+        'rows': rows,
+        'selected_case': selected_case,
+        'related': related,
+    }
 
 
 def _autosize_worksheet(ws):
     for column_cells in ws.columns:
         values = [str(cell.value) if cell.value is not None else '' for cell in column_cells]
         max_len = max((len(value) for value in values), default=0)
-        ws.column_dimensions[column_cells[0].column_letter].width = min(max(max_len + 2, 12), 40)
+        ws.column_dimensions[column_cells[0].column_letter].width = min(max(max_len + 2, 12), 42)
 
 
 def _build_excel_report(kind: str, filter_ctx: dict, payload: dict):
@@ -1539,7 +1714,7 @@ def _build_excel_report(kind: str, filter_ctx: dict, payload: dict):
     elif kind == 'survey_summary':
         ws = wb.active
         ws.title = 'Encuesta'
-        ws.append(['Reporte', 'Satisfacción'])
+        ws.append(['Reporte', 'Calidad y satisfacción'])
         ws.append(['Rango', summary_title])
         ws.append(['Alcance', ', '.join(_role_scope_labels())])
         ws.append([])
@@ -1580,6 +1755,98 @@ def _build_excel_report(kind: str, filter_ctx: dict, payload: dict):
                 float(row.get('avg_rating') or 0),
             ])
         _autosize_worksheet(team_ws)
+
+        detail_ws = wb.create_sheet(title='Detalle encuestas')
+        detail_ws.append(['Encuesta', 'Caso', 'Equipo', 'Asignado a', 'Solicitante', 'Correo', 'Enviada', 'Respondida', 'Calificación', 'Motivo', 'Estado'])
+        for cell in detail_ws[1]:
+            cell.font = Font(bold=True)
+        for row in payload.get('detail_rows') or []:
+            detail_ws.append([
+                row.get('survey_id') or '',
+                row.get('case_id') or '',
+                row.get('assigned_team_label') or '',
+                row.get('assigned_to_name') or '',
+                row.get('requester_name') or '',
+                row.get('recipient_email') or '',
+                row.get('sent_at_display') or '',
+                row.get('completed_at_display') or '',
+                row.get('rating') or '',
+                row.get('reason') or '',
+                row.get('survey_status') or '',
+            ])
+        _autosize_worksheet(detail_ws)
+    elif kind == 'case_lookup':
+        ws = wb.active
+        ws.title = 'Buscar caso'
+        ws.append(['Reporte', 'Buscar caso'])
+        ws.append(['Consulta', filter_ctx.get('case_id_query') or ''])
+        ws.append(['Alcance', ', '.join(_role_scope_labels())])
+        ws.append([])
+        ws.append(['ID', 'Estado', 'Prioridad', 'Atendido', 'Encuesta', 'Calificación', 'Equipo', 'Asignado a', 'Solicitante', 'Creado', 'Cerrado', 'Asunto'])
+        for cell in ws[5]:
+            cell.font = Font(bold=True)
+        for row in payload.get('rows') or []:
+            ws.append([
+                row.get('id') or '',
+                row.get('status') or '',
+                row.get('priority') or '',
+                'Sí' if row.get('was_attended') else 'No',
+                row.get('survey_status') or '',
+                row.get('latest_survey_rating') or '',
+                row.get('assigned_team_label') or '',
+                row.get('assigned_to_name') or '',
+                row.get('requester_name') or '',
+                row.get('created_at_display') or '',
+                row.get('closed_at_display') or '',
+                row.get('subject') or '',
+            ])
+        _autosize_worksheet(ws)
+
+        selected_case = payload.get('selected_case')
+        if selected_case:
+            detail_ws = wb.create_sheet(title='Caso seleccionado')
+            detail_ws.append(['Campo', 'Valor'])
+            for cell in detail_ws[1]:
+                cell.font = Font(bold=True)
+            items = [
+                ('Caso', selected_case.get('id') or ''),
+                ('Asunto', selected_case.get('subject') or ''),
+                ('Estado', selected_case.get('status') or ''),
+                ('Prioridad', selected_case.get('priority') or ''),
+                ('Equipo', selected_case.get('assigned_team_label') or ''),
+                ('Asignado a', selected_case.get('assigned_to_name') or ''),
+                ('Solicitante', selected_case.get('requester_name') or ''),
+                ('Correo solicitante', selected_case.get('requester_email') or ''),
+                ('Atendido', 'Sí' if selected_case.get('was_attended') else 'No'),
+                ('Encuesta', selected_case.get('survey_status') or ''),
+                ('Calificación más reciente', selected_case.get('latest_survey_rating') or ''),
+                ('Motivo encuesta', selected_case.get('latest_survey_reason') or ''),
+                ('Adjuntos', selected_case.get('attachments_count') or 0),
+                ('Actualizaciones', selected_case.get('updates_count') or 0),
+                ('Soluciones registradas', selected_case.get('solution_updates_count') or 0),
+                ('Creado', selected_case.get('created_at_display') or ''),
+                ('Primera respuesta', selected_case.get('first_response_at_display') or ''),
+                ('Resuelto', selected_case.get('resolved_at_display') or ''),
+                ('Cerrado', selected_case.get('closed_at_display') or ''),
+                ('Descripción', selected_case.get('description') or ''),
+                ('Última solución', selected_case.get('latest_solution_message') or ''),
+            ]
+            for item in items:
+                detail_ws.append(list(item))
+            _autosize_worksheet(detail_ws)
+
+            updates_ws = wb.create_sheet(title='Trazabilidad')
+            updates_ws.append(['Fecha', 'Autor', 'Solución', 'Mensaje'])
+            for cell in updates_ws[1]:
+                cell.font = Font(bold=True)
+            for row in payload.get('related', {}).get('updates', []):
+                updates_ws.append([
+                    row.get('created_at_display') or '',
+                    row.get('author_name') or row.get('author_email') or '',
+                    'Sí' if row.get('is_solution') else 'No',
+                    row.get('message') or '',
+                ])
+            _autosize_worksheet(updates_ws)
     else:
         ws = wb.active
         if kind == 'closed':
@@ -1633,7 +1900,7 @@ def _build_excel_report(kind: str, filter_ctx: dict, payload: dict):
                     row.get('subject') or '',
                 ])
         else:
-            headers = ['ID', 'Estado', 'Prioridad', 'ANS respuesta', 'ANS resolución', 'Vence respuesta', 'Vence resolución', 'Equipo', 'Asignado a', 'Solicitante', 'Correo', 'Creado', 'Actualizado', 'Asunto']
+            headers = ['ID', 'Estado', 'Prioridad', 'ANS respuesta', 'ANS resolución', 'Equipo', 'Asignado a', 'Solicitante', 'Correo', 'Creado', 'Primera respuesta', 'Resuelto', 'Asunto']
             ws.append(headers)
             for row in payload['rows']:
                 ws.append([
@@ -1642,46 +1909,44 @@ def _build_excel_report(kind: str, filter_ctx: dict, payload: dict):
                     row.get('priority') or '',
                     row.get('sla_response_text') or '',
                     row.get('sla_resolution_text') or '',
-                    row.get('response_due_at_display') or '',
-                    row.get('resolution_due_at_display') or '',
                     role_label(row.get('assigned_team') or '') if row.get('assigned_team') else '',
                     row.get('assigned_to_name') or '',
                     row.get('requester_name') or '',
                     row.get('requester_email') or '',
                     _fmt_dt(row.get('created_at')),
-                    _fmt_dt(row.get('updated_at')),
+                    _fmt_dt(row.get('first_response_at')),
+                    _fmt_dt(row.get('resolved_at')),
                     row.get('subject') or '',
                 ])
-        header_row_idx = 6 if kind == 'closed' and filter_ctx.get('closed_case_id') else 5
-        for cell in ws[header_row_idx]:
+        for cell in ws[5]:
             cell.font = Font(bold=True)
-        ws.freeze_panes = 'A6'
         _autosize_worksheet(ws)
 
-    buffer = io.BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-    return buffer
+    return wb
 
 
-def _pdf_table(data: list[list], repeat_rows: int = 1):
+def _pdf_table(rows):
     from reportlab.lib import colors
     from reportlab.platypus import Table, TableStyle
 
-    table = Table(data, repeatRows=repeat_rows)
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f3c88')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 7),
-        ('GRID', (0, 0), (-1, -1), 0.25, colors.HexColor('#cbd5e1')),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.HexColor('#f8fafc')]),
-        ('LEFTPADDING', (0, 0), (-1, -1), 4),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-    ]))
+    table = Table(rows, repeatRows=1)
+    table.setStyle(
+        TableStyle(
+            [
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0F172A')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#CBD5E1')),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')]),
+                ('LEFTPADDING', (0, 0), (-1, -1), 4),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+                ('TOPPADDING', (0, 0), (-1, -1), 3),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ]
+        )
+    )
     return table
 
 
@@ -1695,19 +1960,21 @@ def _build_pdf_report(kind: str, filter_ctx: dict, payload: dict):
     styles = getSampleStyleSheet()
     story = []
 
-    title_map = {
+    titles = {
         'summary': 'Resumen operativo',
         'cases': 'Detalle de casos',
         'closed': 'Casos cerrados',
-        'survey_summary': 'Resumen de satisfacción',
+        'survey_summary': 'Calidad y satisfacción',
         'survey_detail': 'Detalle de encuestas',
+        'case_lookup': 'Buscar caso',
     }
-    story.append(Paragraph(f"<b>{title_map.get(kind, 'Reporte')}</b>", styles['Title']))
-    story.append(Paragraph(f"Rango: {filter_ctx['date_from']} a {filter_ctx['date_to']}", styles['Normal']))
+    story.append(Paragraph(titles[kind], styles['Title']))
+    if kind == 'case_lookup':
+        story.append(Paragraph(f"Consulta: {filter_ctx.get('case_id_query') or '-'}", styles['Normal']))
+    else:
+        story.append(Paragraph(f"Rango: {filter_ctx['date_from']} a {filter_ctx['date_to']}", styles['Normal']))
     story.append(Paragraph(f"Alcance: {', '.join(_role_scope_labels())}", styles['Normal']))
-    if kind == 'closed' and filter_ctx.get('closed_case_id'):
-        story.append(Paragraph(f"Filtro caso: {filter_ctx['closed_case_id']}", styles['Normal']))
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 12))
 
     if kind == 'summary':
         totals = payload['totals']
@@ -1774,6 +2041,13 @@ def _build_pdf_report(kind: str, filter_ctx: dict, payload: dict):
                 ['Equipo', 'Encuestas', 'Respondidas', 'Promedio'],
                 *[[role_label(row.get('assigned_team') or '') if row.get('assigned_team') else 'Sin equipo', row.get('total_surveys') or 0, row.get('completed_surveys') or 0, f"{float(row.get('avg_rating') or 0):.2f}"] for row in payload['by_team']]
             ]))
+            story.append(Spacer(1, 12))
+        if payload.get('detail_rows'):
+            story.append(Paragraph('Detalle de encuestas', styles['Heading2']))
+            story.append(_pdf_table([
+                ['Caso', 'Equipo', 'Solicitante', 'Correo', 'Enviada', 'Respondida', 'Calificación', 'Motivo'],
+                *[[row.get('case_id') or '', row.get('assigned_team_label') or '', row.get('requester_name') or '', row.get('recipient_email') or '', row.get('sent_at_display') or '', row.get('completed_at_display') or '', row.get('rating') or '', row.get('reason') or ''] for row in payload['detail_rows']]
+            ]))
     elif kind == 'survey_detail':
         story.append(Paragraph(f"Total filas: {len(payload['rows'])}", styles['Normal']))
         story.append(Spacer(1, 8))
@@ -1788,12 +2062,59 @@ def _build_pdf_report(kind: str, filter_ctx: dict, payload: dict):
             ['ID', 'Estado', 'Prioridad', 'Equipo', 'Asignado a', 'Solicitante', 'Correo', 'Cerrado', 'Asunto'],
             *[[row.get('id') or '', row.get('status') or '', normalize_priority(row.get('priority') or 'MEDIA'), row.get('assigned_team_label') or '', row.get('assigned_to_name') or '', row.get('requester_name') or '', row.get('requester_email') or '', row.get('closed_at_display') or '', row.get('subject') or ''] for row in payload['rows']]
         ]))
+    elif kind == 'case_lookup':
+        selected_case = payload.get('selected_case')
+        rows = payload.get('rows') or []
+        story.append(Paragraph(f"Coincidencias: {len(rows)}", styles['Normal']))
+        story.append(Spacer(1, 8))
+        story.append(_pdf_table([
+            ['Caso', 'Estado', 'Prioridad', 'Atendido', 'Encuesta', 'Calificación', 'Equipo', 'Asignado a', 'Cerrado'],
+            *[[row.get('id') or '', row.get('status') or '', row.get('priority') or '', 'Sí' if row.get('was_attended') else 'No', row.get('survey_status') or '', row.get('latest_survey_rating') or '', row.get('assigned_team_label') or '', row.get('assigned_to_name') or '', row.get('closed_at_display') or ''] for row in rows]
+        ]))
+        if selected_case:
+            story.append(Spacer(1, 12))
+            story.append(Paragraph('Detalle del caso seleccionado', styles['Heading2']))
+            story.append(_pdf_table([
+                ['Campo', 'Valor'],
+                ['Caso', selected_case.get('id') or ''],
+                ['Asunto', selected_case.get('subject') or ''],
+                ['Estado', selected_case.get('status') or ''],
+                ['Prioridad', selected_case.get('priority') or ''],
+                ['Equipo', selected_case.get('assigned_team_label') or ''],
+                ['Asignado a', selected_case.get('assigned_to_name') or ''],
+                ['Solicitante', selected_case.get('requester_name') or ''],
+                ['Correo solicitante', selected_case.get('requester_email') or ''],
+                ['Atendido', 'Sí' if selected_case.get('was_attended') else 'No'],
+                ['Encuesta', selected_case.get('survey_status') or ''],
+                ['Calificación más reciente', selected_case.get('latest_survey_rating') or ''],
+                ['Motivo encuesta', selected_case.get('latest_survey_reason') or ''],
+                ['Primera respuesta', selected_case.get('first_response_at_display') or ''],
+                ['Resuelto', selected_case.get('resolved_at_display') or ''],
+                ['Cerrado', selected_case.get('closed_at_display') or ''],
+                ['Adjuntos', selected_case.get('attachments_count') or 0],
+                ['Actualizaciones', selected_case.get('updates_count') or 0],
+            ]))
+            related = payload.get('related', {})
+            if related.get('surveys'):
+                story.append(Spacer(1, 12))
+                story.append(Paragraph('Encuestas de calidad', styles['Heading2']))
+                story.append(_pdf_table([
+                    ['Encuesta', 'Correo', 'Enviada', 'Respondida', 'Calificación', 'Motivo'],
+                    *[[row.get('survey_id') or '', row.get('recipient_email') or '', row.get('sent_at_display') or '', row.get('completed_at_display') or '', row.get('rating') or '', row.get('reason') or ''] for row in related['surveys']]
+                ]))
+            if related.get('updates'):
+                story.append(Spacer(1, 12))
+                story.append(Paragraph('Trazabilidad reciente', styles['Heading2']))
+                story.append(_pdf_table([
+                    ['Fecha', 'Autor', 'Solución', 'Mensaje'],
+                    *[[row.get('created_at_display') or '', row.get('author_name') or row.get('author_email') or '', 'Sí' if row.get('is_solution') else 'No', row.get('message') or ''] for row in related['updates']]
+                ]))
     else:
         story.append(Paragraph(f"Total filas: {len(payload['rows'])}", styles['Normal']))
         story.append(Spacer(1, 8))
         story.append(_pdf_table([
-            ['ID', 'Estado', 'Prioridad', 'ANS resp.', 'ANS resol.', 'Equipo', 'Asignado a', 'Solicitante', 'Creado', 'Asunto'],
-            *[[row.get('id') or '', row.get('status') or '', row.get('priority') or '', row.get('sla_response_text') or '', row.get('sla_resolution_text') or '', role_label(row.get('assigned_team') or '') if row.get('assigned_team') else '', row.get('assigned_to_name') or '', row.get('requester_email') or row.get('requester_name') or '', _fmt_dt(row.get('created_at')), row.get('subject') or ''] for row in payload['rows']]
+            ['ID', 'Estado', 'Prioridad', 'ANS resp.', 'ANS resol.', 'Equipo', 'Asignado a', 'Solicitante', 'Creado', 'Primera respuesta', 'Resuelto', 'Asunto'],
+            *[[row.get('id') or '', row.get('status') or '', row.get('priority') or '', row.get('sla_response_text') or '', row.get('sla_resolution_text') or '', role_label(row.get('assigned_team') or '') if row.get('assigned_team') else '', row.get('assigned_to_name') or '', row.get('requester_email') or row.get('requester_name') or '', _fmt_dt(row.get('created_at')), _fmt_dt(row.get('first_response_at')), _fmt_dt(row.get('resolved_at')), row.get('subject') or ''] for row in payload['rows']]
         ]))
 
     doc.build(story)
@@ -1801,53 +2122,67 @@ def _build_pdf_report(kind: str, filter_ctx: dict, payload: dict):
     return buffer
 
 
+def _build_selected_report(selected_kind: str, filter_ctx: dict) -> dict:
+    if selected_kind == 'summary':
+        return {
+            'totals': _report_totals(filter_ctx),
+            'by_team': _report_by_team(filter_ctx),
+            'by_status': _report_by_status(filter_ctx),
+            'by_priority': _report_by_priority(filter_ctx),
+            'top_owners': _report_top_owners(filter_ctx),
+        }
+    if selected_kind == 'survey_summary':
+        return {
+            'totals': _survey_report_totals(filter_ctx),
+            'by_rating': _survey_report_by_rating(filter_ctx),
+            'by_team': _survey_report_by_team(filter_ctx),
+            'detail_rows': _survey_report_detail_rows(filter_ctx, limit=200),
+        }
+    if selected_kind == 'survey_detail':
+        return {
+            'rows': _survey_report_detail_rows(filter_ctx, limit=200),
+            'total_rows': _survey_report_detail_count(filter_ctx),
+        }
+    if selected_kind == 'closed':
+        return {
+            'rows': _report_detail_rows(filter_ctx, limit=200),
+            'total_rows': _report_detail_count(filter_ctx),
+        }
+    if selected_kind == 'case_lookup':
+        return _build_case_lookup_payload(filter_ctx)
+    return {
+        'rows': _report_detail_rows(filter_ctx, limit=200),
+        'total_rows': _report_detail_count(filter_ctx),
+    }
+
+
 @cases_bp.route('/reports')
 @login_required
 def reports():
-    summary_filter = _build_report_filter('summary')
-    closed_filter = _build_report_filter('closed')
-    for message in summary_filter['messages'] + [m for m in closed_filter['messages'] if m not in summary_filter['messages']]:
+    selected_kind = _normalize_report_kind(request.args.get('kind') or 'summary')
+    filter_kind = 'closed' if selected_kind == 'closed' else selected_kind
+    if filter_kind not in {'summary', 'cases', 'closed', 'survey_summary', 'survey_detail', 'case_lookup'}:
+        filter_kind = 'summary'
+    filter_ctx = _build_report_filter(filter_kind)
+    for message in filter_ctx['messages']:
         flash(message, 'warning')
 
-    totals = _report_totals(summary_filter)
-    by_team = _report_by_team(summary_filter)
-    by_status = _report_by_status(summary_filter)
-    by_priority = _report_by_priority(summary_filter)
-    top_owners = _report_top_owners(summary_filter)
-
-    survey_totals = _survey_report_totals(summary_filter)
-    survey_by_rating = _survey_report_by_rating(summary_filter)
-    survey_by_team = _survey_report_by_team(summary_filter)
-
-    cases_count = _report_detail_count(summary_filter)
-    closed_count = _report_detail_count(closed_filter)
-    survey_count = _survey_report_detail_count(summary_filter)
-    closed_cases = []
-    if closed_filter['closed_case_id']:
-        closed_cases = _report_detail_rows(closed_filter, limit=100)
-    survey_rows = _survey_report_detail_rows(summary_filter, limit=50)
+    selected_payload = _build_selected_report(selected_kind, filter_ctx)
+    selected_label = next((item['label'] for item in REPORT_KIND_CHOICES if item['key'] == selected_kind), 'Reporte')
 
     return render_template(
         'reports/index.html',
         title='Reportes',
-        totals=totals,
-        by_team=by_team,
-        by_status=by_status,
-        top_owners=top_owners,
-        by_priority=by_priority,
-        survey_totals=survey_totals,
-        survey_by_rating=survey_by_rating,
-        survey_by_team=survey_by_team,
-        survey_rows=survey_rows,
-        closed_case_id=closed_filter['closed_case_id'],
-        closed_cases=closed_cases,
         notif_count=_notif_count(),
         scope_labels=_role_scope_labels(),
-        date_from=summary_filter['date_from'],
-        date_to=summary_filter['date_to'],
-        cases_count=cases_count,
-        closed_count=closed_count,
-        survey_count=survey_count,
+        report_kinds=_report_kind_choices(),
+        selected_kind=selected_kind,
+        selected_label=selected_label,
+        selected_payload=selected_payload,
+        date_from=filter_ctx['date_from'],
+        date_to=filter_ctx['date_to'],
+        closed_case_id=filter_ctx['closed_case_id'],
+        case_id_query=filter_ctx.get('case_id_query') or '',
         report_limits={
             'default_days': REPORT_DEFAULT_RANGE_DAYS,
             'max_days': REPORT_MAX_RANGE_DAYS,
@@ -1860,16 +2195,16 @@ def reports():
 @cases_bp.route('/reports/export')
 @login_required
 def reports_export():
-    kind = (request.args.get('kind') or 'summary').strip().lower()
+    kind = _normalize_report_kind(request.args.get('kind') or 'summary')
     output_format = (request.args.get('format') or 'xlsx').strip().lower()
-    if kind not in {'summary', 'cases', 'closed', 'survey_summary', 'survey_detail'}:
+    if kind not in {'summary', 'cases', 'closed', 'survey_summary', 'survey_detail', 'case_lookup'}:
         flash('Tipo de reporte no válido.', 'warning')
         return redirect(url_for('cases.reports'))
     if output_format not in {'xlsx', 'pdf'}:
         flash('Formato de exportación no válido.', 'warning')
         return redirect(url_for('cases.reports'))
 
-    filter_ctx = _build_report_filter('closed' if kind == 'closed' else 'summary')
+    filter_ctx = _build_report_filter('closed' if kind == 'closed' else kind)
 
     if kind == 'summary':
         payload = {
@@ -1880,11 +2215,18 @@ def reports_export():
             'top_owners': _report_top_owners(filter_ctx),
         }
     elif kind == 'survey_summary':
+        detail_limit = REPORT_MAX_PDF_ROWS if output_format == 'pdf' else REPORT_MAX_EXPORT_ROWS
         payload = {
             'totals': _survey_report_totals(filter_ctx),
             'by_rating': _survey_report_by_rating(filter_ctx),
             'by_team': _survey_report_by_team(filter_ctx),
+            'detail_rows': _survey_report_detail_rows(filter_ctx, limit=detail_limit),
         }
+    elif kind == 'case_lookup':
+        payload = _build_case_lookup_payload(filter_ctx)
+        if not (filter_ctx.get('case_id_query') or '').strip():
+            flash('Debes indicar un caso para el reporte de búsqueda.', 'warning')
+            return redirect(url_for('cases.reports', kind=kind, date_from=filter_ctx['date_from'], date_to=filter_ctx['date_to']))
     else:
         if kind == 'survey_detail':
             total_rows = _survey_report_detail_count(filter_ctx)
@@ -1896,7 +2238,7 @@ def reports_export():
                 f'El reporte solicitado contiene {total_rows} filas. Reduce el rango para no exceder el límite de {row_limit} filas en {output_format.upper()}.',
                 'warning',
             )
-            return redirect(url_for('cases.reports', date_from=filter_ctx['date_from'], date_to=filter_ctx['date_to'], closed_case_id=filter_ctx.get('closed_case_id') or ''))
+            return redirect(url_for('cases.reports', **_report_redirect_args(kind, filter_ctx['date_from'], filter_ctx['date_to'], filter_ctx.get('closed_case_id') or '', filter_ctx.get('case_id_query') or '')))
         if kind == 'survey_detail':
             payload = {'rows': _survey_report_detail_rows(filter_ctx)}
         else:
@@ -1909,10 +2251,14 @@ def reports_export():
         'closed': 'cerrados',
         'survey_summary': 'encuesta_resumen',
         'survey_detail': 'encuesta_detalle',
+        'case_lookup': 'buscar_caso',
     }[kind]
 
     if output_format == 'xlsx':
-        buffer = _build_excel_report(kind, filter_ctx, payload)
+        wb = _build_excel_report(kind, filter_ctx, payload)
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
         return send_file(
             buffer,
             as_attachment=True,

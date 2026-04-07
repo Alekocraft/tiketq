@@ -1,463 +1,504 @@
-{% extends "layout.html" %}
+{% extends 'layout.html' %}
+
+{% block head_extra %}
+<style>
+  .reports-shell { display:grid; gap:24px; }
+  .reports-hero, .reports-panel, .reports-card, .reports-table-wrap { background:#fff; border:1px solid #e5e7eb; border-radius:20px; box-shadow:0 10px 30px rgba(15,23,42,.06); }
+  .reports-hero { padding:28px; display:grid; gap:10px; }
+  .reports-hero h1 { margin:0; font-size:1.9rem; }
+  .reports-muted { color:#64748b; }
+  .reports-form { padding:24px; display:grid; gap:22px; }
+  .reports-step { display:grid; gap:12px; }
+  .reports-step__label { font-weight:700; color:#0f172a; }
+  .report-type-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px; }
+  .report-type-option { position:relative; }
+  .report-type-option input { position:absolute; inset:0; opacity:0; }
+  .report-type-card { height:100%; border:1px solid #dbe3ef; border-radius:18px; padding:16px; background:#f8fafc; cursor:pointer; transition:.2s ease; display:grid; gap:8px; }
+  .report-type-option input:checked + .report-type-card { border-color:#0098B1; background:#effcff; box-shadow:0 0 0 3px rgba(0,152,177,.12); }
+  .report-type-card strong { color:#0f172a; }
+  .reports-fields { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px; }
+  .field { display:grid; gap:8px; }
+  .field label { font-weight:600; color:#334155; }
+  .field input, .field select { border:1px solid #cbd5e1; border-radius:12px; padding:12px 14px; font:inherit; background:#fff; }
+  .reports-actions { display:flex; flex-wrap:wrap; gap:12px; }
+  .btn-primary, .btn-secondary { text-decoration:none; border:none; border-radius:999px; padding:12px 18px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+  .btn-primary { background:#0098B1; color:#fff; }
+  .btn-secondary { background:#eef2f7; color:#0f172a; }
+  .reports-result { display:grid; gap:18px; }
+  .reports-result__head { padding:20px 24px; display:flex; justify-content:space-between; gap:16px; align-items:flex-start; }
+  .reports-result__head h2 { margin:0 0 6px; }
+  .reports-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:16px; }
+  .reports-card { padding:18px; }
+  .reports-card h3 { margin:0 0 12px; font-size:1rem; }
+  .metric-list, .detail-list { margin:0; padding:0; list-style:none; display:grid; gap:8px; }
+  .metric-list li, .detail-list li { display:flex; justify-content:space-between; gap:12px; border-bottom:1px solid #eef2f7; padding-bottom:8px; }
+  .detail-list li:last-child, .metric-list li:last-child { border-bottom:none; padding-bottom:0; }
+  .reports-table-wrap { overflow:auto; }
+  table.reports-table { width:100%; border-collapse:collapse; min-width:760px; }
+  .reports-table th, .reports-table td { padding:12px 14px; border-bottom:1px solid #e5e7eb; vertical-align:top; text-align:left; }
+  .reports-table th { background:#0f172a; color:#fff; position:sticky; top:0; }
+  .badge { display:inline-flex; align-items:center; border-radius:999px; padding:4px 10px; font-size:.82rem; font-weight:700; background:#eef2f7; color:#334155; }
+  .badge.ok { background:#dcfce7; color:#166534; }
+  .badge.warn { background:#fef3c7; color:#92400e; }
+  .badge.info { background:#e0f2fe; color:#075985; }
+  .reports-inline { display:flex; gap:8px; flex-wrap:wrap; }
+  .section-title { margin:0 0 12px; font-size:1.05rem; color:#0f172a; }
+  .section-subtitle { margin:0 0 14px; color:#64748b; font-size:.92rem; }
+  .lookup-shell { display:grid; gap:18px; }
+  .lookup-overview { display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:14px; }
+  .lookup-kpi { background:#fff; border:1px solid #e5e7eb; border-radius:18px; padding:16px 18px; box-shadow:0 10px 30px rgba(15,23,42,.05); display:grid; gap:6px; }
+  .lookup-kpi__label { color:#64748b; font-size:.88rem; }
+  .lookup-kpi__value { font-size:1.05rem; font-weight:800; color:#0f172a; }
+  .lookup-layout { display:grid; grid-template-columns:minmax(320px, 380px) minmax(0, 1fr); gap:16px; align-items:start; }
+  .lookup-stack { display:grid; gap:16px; }
+  .lookup-panel { background:#fff; border:1px solid #e5e7eb; border-radius:18px; padding:18px; box-shadow:0 10px 30px rgba(15,23,42,.05); }
+  .lookup-panel--context { min-width:0; }
+  .lookup-list { margin:0; padding:0; list-style:none; display:grid; gap:10px; }
+  .lookup-list li { display:grid; gap:4px; padding-bottom:10px; border-bottom:1px solid #eef2f7; }
+  .lookup-list li:last-child { border-bottom:none; padding-bottom:0; }
+  .lookup-list span { color:#64748b; font-size:.88rem; }
+  .lookup-list strong { color:#0f172a; font-weight:700; line-height:1.45; }
+  .lookup-text { white-space:pre-wrap; word-break:break-word; }
+  .lookup-table-title { padding:16px 20px 0; }
+  @media (max-width: 980px) {
+    .lookup-layout { grid-template-columns:1fr; }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
-  <section class="hero-panel hero-panel--compact">
-    <div>
-      <div class="hero-panel__eyebrow">Indicadores operativos</div>
-      <h1>Reportes</h1>
-      <p>Vista consolidada para {{ scope_labels|join(', ') if scope_labels else 'tu perfil actual' }}.</p>
-    </div>
-    <div class="hero-panel__actions">
-      <a class="btn btn-secondary" href="{{ url_for('cases.reports_export', kind='summary', format='xlsx', date_from=date_from, date_to=date_to, closed_case_id=closed_case_id) }}">Resumen Excel</a>
-      <a class="btn btn-ghost" href="{{ url_for('cases.reports_export', kind='summary', format='pdf', date_from=date_from, date_to=date_to, closed_case_id=closed_case_id) }}">Resumen PDF</a>
-      <a class="btn btn-ghost" href="{{ url_for('cases.reports_export', kind='cases', format='xlsx', date_from=date_from, date_to=date_to, closed_case_id=closed_case_id) }}">Casos Excel</a>
-      <a class="btn btn-ghost" href="{{ url_for('cases.reports_export', kind='cases', format='pdf', date_from=date_from, date_to=date_to, closed_case_id=closed_case_id) }}">Casos PDF</a>
-      <a class="btn btn-ghost" href="{{ url_for('cases.reports_export', kind='closed', format='xlsx', date_from=date_from, date_to=date_to, closed_case_id=closed_case_id) }}">Cerrados Excel</a>
-      <a class="btn btn-ghost" href="{{ url_for('cases.reports_export', kind='closed', format='pdf', date_from=date_from, date_to=date_to, closed_case_id=closed_case_id) }}">Cerrados PDF</a>
-      <a class="btn btn-ghost" href="{{ url_for('cases.reports_export', kind='survey_summary', format='xlsx', date_from=date_from, date_to=date_to) }}">Encuesta Excel</a>
-      <a class="btn btn-ghost" href="{{ url_for('cases.reports_export', kind='survey_summary', format='pdf', date_from=date_from, date_to=date_to) }}">Encuesta PDF</a>
-      <a class="btn btn-ghost" href="{{ url_for('cases.reports_export', kind='survey_detail', format='xlsx', date_from=date_from, date_to=date_to) }}">Detalle encuesta Excel</a>
-      <a class="btn btn-ghost" href="{{ url_for('cases.reports_export', kind='survey_detail', format='pdf', date_from=date_from, date_to=date_to) }}">Detalle encuesta PDF</a>
+<div class="reports-shell">
+  <section class="reports-hero">
+    <h1>Reportes de SolucionaTI</h1>
+    <div class="reports-muted">Selecciona primero el tipo de reporte y luego el rango de fechas. Para búsqueda de caso puedes indicar el ID o parte del ID.</div>
+    <div class="reports-inline">
+      <span class="badge info">Rango sugerido: {{ report_limits.default_days }} días</span>
+      <span class="badge">Máximo exportación Excel: {{ report_limits.max_export_rows }} filas</span>
+      <span class="badge">Máximo exportación PDF: {{ report_limits.max_pdf_rows }} filas</span>
     </div>
   </section>
 
-  <section class="panel-card">
-    <div class="section-head section-head--tight">
-      <div>
-        <h2>Filtros del reporte</h2>
-        <p>El rango se aplica por fecha de creación para el resumen y por fecha de cierre para el reporte de cerrados.</p>
+  <section class="reports-panel">
+    <form class="reports-form" method="get" action="{{ url_for('cases.reports') }}">
+      <div class="reports-step">
+        <div class="reports-step__label">1. Selecciona el tipo de reporte</div>
+        <div class="report-type-grid">
+          {% for item in report_kinds %}
+          <label class="report-type-option">
+            <input type="radio" name="kind" value="{{ item.key }}" {% if selected_kind == item.key %}checked{% endif %}>
+            <span class="report-type-card">
+              <strong>{{ item.label }}</strong>
+              <span class="reports-muted">{{ item.description }}</span>
+            </span>
+          </label>
+          {% endfor %}
+        </div>
       </div>
-    </div>
-    <form method="get" class="filter-grid filter-grid--closed-report">
-      <div>
-        <label for="date_from">Fecha inicial</label>
-        <input id="date_from" type="date" name="date_from" value="{{ date_from }}" required>
+
+      <div class="reports-step">
+        <div class="reports-step__label">2. Define el rango y filtros</div>
+        <div class="reports-fields">
+          <div class="field">
+            <label for="date_from">Fecha inicial</label>
+            <input id="date_from" type="date" name="date_from" value="{{ date_from }}">
+          </div>
+          <div class="field">
+            <label for="date_to">Fecha final</label>
+            <input id="date_to" type="date" name="date_to" value="{{ date_to }}">
+          </div>
+          <div class="field">
+            <label for="closed_case_id">Filtro para cerrados</label>
+            <input id="closed_case_id" type="text" name="closed_case_id" value="{{ closed_case_id }}" placeholder="Ej. Q-2026-00025">
+          </div>
+          <div class="field">
+            <label for="case_id_query">Buscar caso</label>
+            <input id="case_id_query" type="text" name="case_id_query" value="{{ case_id_query }}" placeholder="Ej. Q-2026-00025">
+          </div>
+        </div>
       </div>
-      <div>
-        <label for="date_to">Fecha final</label>
-        <input id="date_to" type="date" name="date_to" value="{{ date_to }}" required>
-      </div>
-      <div>
-        <label for="closed_case_id">Caso cerrado específico</label>
-        <input id="closed_case_id" name="closed_case_id" value="{{ closed_case_id }}" placeholder="Q-2026-00024" />
-      </div>
-      <div class="table-actions">
-        <button class="btn btn-primary" type="submit">Actualizar reporte</button>
+
+      <div class="reports-actions">
+        <button class="btn-primary" type="submit">Ver reporte</button>
+        <a class="btn-secondary" href="{{ url_for('cases.reports_export', kind=selected_kind, format='xlsx', date_from=date_from, date_to=date_to, closed_case_id=closed_case_id, case_id_query=case_id_query) }}">Exportar Excel</a>
+        <a class="btn-secondary" href="{{ url_for('cases.reports_export', kind=selected_kind, format='pdf', date_from=date_from, date_to=date_to, closed_case_id=closed_case_id, case_id_query=case_id_query) }}">Exportar PDF</a>
       </div>
     </form>
-    <div class="empty-state" style="margin-top: 1rem; text-align: left;">
-      <div class="empty-state__title">Límites de seguridad de consulta</div>
-      <p class="muted">Rango por defecto: {{ report_limits.default_days }} días. Rango máximo: {{ report_limits.max_days }} días.</p>
-      <p class="muted">Exportación detalle: máximo {{ report_limits.max_export_rows }} filas en Excel y {{ report_limits.max_pdf_rows }} filas en PDF.</p>
-      <p class="muted">Las exportaciones mantienen el mismo alcance y permisos del usuario autenticado.</p>
-    </div>
   </section>
 
-  <section class="metric-grid metric-grid--6">
-    <article class="metric-card">
-      <span class="metric-card__label">Total casos</span>
-      <strong class="metric-card__value">{{ totals.get('total_cases', 0) or 0 }}</strong>
-      <span class="metric-card__meta">Dentro de tu alcance</span>
-    </article>
-    <article class="metric-card">
-      <span class="metric-card__label">Activos</span>
-      <strong class="metric-card__value">{{ totals.get('open_cases', 0) or 0 }}</strong>
-      <span class="metric-card__meta">Pendientes, asignados y reabiertos</span>
-    </article>
-    <article class="metric-card">
-      <span class="metric-card__label">Resueltos</span>
-      <strong class="metric-card__value">{{ totals.get('resolved_cases', 0) or 0 }}</strong>
-      <span class="metric-card__meta">Casos finalizados</span>
-    </article>
-    <article class="metric-card">
-      <span class="metric-card__label">Reabiertos</span>
-      <strong class="metric-card__value">{{ totals.get('reopened_cases', 0) or 0 }}</strong>
-      <span class="metric-card__meta">Seguimiento prioritario</span>
-    </article>
-    <article class="metric-card">
-      <span class="metric-card__label">Prioridad alta</span>
-      <strong class="metric-card__value">{{ totals.get('high_priority', 0) or 0 }}</strong>
-      <span class="metric-card__meta">ALTA y P1</span>
-    </article>
-    <article class="metric-card">
-      <span class="metric-card__label">Cerrados</span>
-      <strong class="metric-card__value">{{ totals.get('closed_cases', 0) or 0 }}</strong>
-      <span class="metric-card__meta">Total visibles en el rango</span>
-    </article>
-  </section>
-
-  <section class="metric-grid metric-grid--4">
-    <article class="metric-card">
-      <span class="metric-card__label">Filas exportables de casos</span>
-      <strong class="metric-card__value">{{ cases_count }}</strong>
-      <span class="metric-card__meta">Se usa para detalle y control de volumen</span>
-    </article>
-    <article class="metric-card">
-      <span class="metric-card__label">Filas exportables de cerrados</span>
-      <strong class="metric-card__value">{{ closed_count }}</strong>
-      <span class="metric-card__meta">Se calcula por fecha de cierre</span>
-    </article>
-    <article class="metric-card">
-      <span class="metric-card__label">Filas exportables de encuestas</span>
-      <strong class="metric-card__value">{{ survey_count }}</strong>
-      <span class="metric-card__meta">Mismo alcance visible del usuario autenticado</span>
-    </article>
-    <article class="metric-card">
-      <span class="metric-card__label">Rango activo</span>
-      <strong class="metric-card__value">{{ date_from }}</strong>
-      <span class="metric-card__meta">hasta {{ date_to }}</span>
-    </article>
-  </section>
-
-  <section class="metric-grid metric-grid--6">
-    <article class="metric-card">
-      <span class="metric-card__label">Encuestas visibles</span>
-      <strong class="metric-card__value">{{ survey_totals.get('total_surveys', 0) or 0 }}</strong>
-      <span class="metric-card__meta">Dentro de tu alcance</span>
-    </article>
-    <article class="metric-card">
-      <span class="metric-card__label">Enviadas</span>
-      <strong class="metric-card__value">{{ survey_totals.get('sent_surveys', 0) or 0 }}</strong>
-      <span class="metric-card__meta">Notificaciones emitidas</span>
-    </article>
-    <article class="metric-card">
-      <span class="metric-card__label">Respondidas</span>
-      <strong class="metric-card__value">{{ survey_totals.get('completed_surveys', 0) or 0 }}</strong>
-      <span class="metric-card__meta">Encuestas completadas</span>
-    </article>
-    <article class="metric-card">
-      <span class="metric-card__label">Pendientes</span>
-      <strong class="metric-card__value">{{ survey_totals.get('pending_surveys', 0) or 0 }}</strong>
-      <span class="metric-card__meta">Sin respuesta aún</span>
-    </article>
-    <article class="metric-card">
-      <span class="metric-card__label">Promedio</span>
-      <strong class="metric-card__value">{{ '%.2f'|format(survey_totals.get('avg_rating', 0) or 0) }}</strong>
-      <span class="metric-card__meta">Sobre 5 puntos</span>
-    </article>
-    <article class="metric-card">
-      <span class="metric-card__label">Calificación baja</span>
-      <strong class="metric-card__value">{{ survey_totals.get('low_ratings', 0) or 0 }}</strong>
-      <span class="metric-card__meta">Notas 1 y 2</span>
-    </article>
-  </section>
-
-  <section class="report-grid">
-    <article class="panel-card">
-      <div class="section-head section-head--tight">
-        <div>
-          <h2>Satisfacción por calificación</h2>
-          <p>Distribución de respuestas entre 1 y 5 dentro del rango seleccionado.</p>
-        </div>
-      </div>
-      {% if survey_by_rating %}
-      <div class="table-wrap">
-        <table class="table table--clean">
-          <thead>
-            <tr>
-              <th>Calificación</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in survey_by_rating %}
-            <tr>
-              <td>{{ row['rating'] }}</td>
-              <td>{{ row['total_surveys'] or 0 }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-      <div class="empty-state">
-        <div class="empty-state__title">Sin respuestas registradas</div>
-        <p class="muted">No hay encuestas calificadas en el rango visible.</p>
-      </div>
-      {% endif %}
-    </article>
-
-    <article class="panel-card">
-      <div class="section-head section-head--tight">
-        <div>
-          <h2>Satisfacción por equipo</h2>
-          <p>Se respeta el mismo alcance visible por roles y permisos.</p>
-        </div>
-      </div>
-      {% if survey_by_team %}
-      <div class="table-wrap">
-        <table class="table table--clean">
-          <thead>
-            <tr>
-              <th>Equipo</th>
-              <th>Encuestas</th>
-              <th>Respondidas</th>
-              <th>Promedio</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in survey_by_team %}
-            <tr>
-              <td>{{ row['assigned_team'] or 'Sin equipo' }}</td>
-              <td>{{ row['total_surveys'] or 0 }}</td>
-              <td>{{ row['completed_surveys'] or 0 }}</td>
-              <td>{{ '%.2f'|format(row['avg_rating'] or 0) }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-      <div class="empty-state">
-        <div class="empty-state__title">Sin datos por equipo</div>
-        <p class="muted">No hay encuestas visibles para este rango.</p>
-      </div>
-      {% endif %}
-    </article>
-  </section>
-
-  <section class="panel-card">
-    <div class="section-head section-head--tight">
+  <section class="reports-result">
+    <div class="reports-panel reports-result__head">
       <div>
-        <h2>Detalle reciente de encuestas</h2>
-        <p>Vista previa de hasta 50 registros. Para el detalle completo usa la exportación en Excel o PDF.</p>
-      </div>
-    </div>
-    {% if survey_rows %}
-    <div class="table-wrap table-wrap--compact">
-      <table class="table table--clean table--cases">
-        <thead>
-          <tr>
-            <th>Encuesta</th>
-            <th>Caso</th>
-            <th>Equipo</th>
-            <th>Asignado</th>
-            <th>Correo</th>
-            <th>Enviada</th>
-            <th>Respondida</th>
-            <th>Calificación</th>
-            <th>Motivo</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in survey_rows %}
-          <tr>
-            <td>{{ row['survey_id'] }}</td>
-            <td class="cell-id"><strong>{{ row['case_id'] }}</strong></td>
-            <td>{{ row['assigned_team_label'] or '-' }}</td>
-            <td>{{ row['assigned_to_name'] or '-' }}</td>
-            <td>{{ row['recipient_email'] or '-' }}</td>
-            <td class="cell-nowrap">{{ row['sent_at_display'] or '-' }}</td>
-            <td class="cell-nowrap">{{ row['completed_at_display'] or '-' }}</td>
-            <td>{{ row['rating_display'] }}</td>
-            <td>{{ row['reason'] or '-' }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}
-    <div class="empty-state">
-      <div class="empty-state__title">Sin encuestas para mostrar</div>
-      <p class="muted">Cuando existan envíos o respuestas visibles en el rango, aparecerán aquí.</p>
-    </div>
-    {% endif %}
-  </section>
-
-  <section class="report-grid">
-    <article class="panel-card">
-      <div class="section-head section-head--tight">
-        <div>
-          <h2>Por equipo</h2>
-          <p>Distribución de la carga visible por cola operativa.</p>
+        <h2>{{ selected_label }}</h2>
+        <div class="reports-muted">
+          {% if selected_kind == 'case_lookup' %}
+            Consulta actual: <strong>{{ case_id_query or 'sin filtro' }}</strong>
+          {% else %}
+            Rango actual: <strong>{{ date_from }}</strong> a <strong>{{ date_to }}</strong>
+          {% endif %}
         </div>
-      </div>
-      {% if by_team %}
-      <div class="table-wrap">
-        <table class="table table--clean">
-          <thead>
-            <tr>
-              <th>Equipo</th>
-              <th>Total</th>
-              <th>Activos</th>
-              <th>Resueltos</th>
-              <th>Cerrados</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in by_team %}
-            <tr>
-              <td>{{ row['assigned_team'] or 'Sin equipo' }}</td>
-              <td>{{ row['total_cases'] or 0 }}</td>
-              <td>{{ row['open_cases'] or 0 }}</td>
-              <td>{{ row['resolved_cases'] or 0 }}</td>
-              <td>{{ row['closed_cases'] or 0 }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-      <div class="empty-state">
-        <div class="empty-state__title">Sin datos por equipo</div>
-        <p class="muted">No hay casos visibles para agrupar en este momento.</p>
-      </div>
-      {% endif %}
-    </article>
-
-    <article class="panel-card">
-      <div class="section-head section-head--tight">
-        <div>
-          <h2>Por estado</h2>
-          <p>Conteo operativo por estado actual.</p>
-        </div>
-      </div>
-      {% if by_status %}
-      <div class="table-wrap">
-        <table class="table table--clean">
-          <thead>
-            <tr>
-              <th>Estado</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in by_status %}
-            <tr>
-              <td><span class="status-pill">{{ row['status'] or 'Sin estado' }}</span></td>
-              <td>{{ row['total_cases'] or 0 }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-      <div class="empty-state">
-        <div class="empty-state__title">Sin datos por estado</div>
-        <p class="muted">Aún no hay registros visibles para este reporte.</p>
-      </div>
-      {% endif %}
-    </article>
-  </section>
-
-  <section class="report-grid">
-    <article class="panel-card">
-      <div class="section-head section-head--tight">
-        <div>
-          <h2>Por prioridad</h2>
-          <p>Distribución según criticidad configurada.</p>
-        </div>
-      </div>
-      {% if by_priority %}
-      <div class="table-wrap">
-        <table class="table table--clean">
-          <thead>
-            <tr>
-              <th>Prioridad</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in by_priority %}
-            <tr>
-              <td>{{ row['priority'] or 'Sin prioridad' }}</td>
-              <td>{{ row['total_cases'] or 0 }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-      <div class="empty-state">
-        <div class="empty-state__title">Sin datos por prioridad</div>
-        <p class="muted">No hay casos visibles para clasificar.</p>
-      </div>
-      {% endif %}
-    </article>
-
-    <article class="panel-card">
-      <div class="section-head section-head--tight">
-        <div>
-          <h2>Responsables con mayor carga</h2>
-          <p>Top de asignación dentro de tu alcance visible.</p>
-        </div>
-      </div>
-      {% if top_owners %}
-      <div class="table-wrap">
-        <table class="table table--clean">
-          <thead>
-            <tr>
-              <th>Responsable</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in top_owners %}
-            <tr>
-              <td>{{ row['owner_name'] or 'Sin asignación' }}</td>
-              <td>{{ row['total_cases'] or 0 }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-      <div class="empty-state">
-        <div class="empty-state__title">Sin responsables para mostrar</div>
-        <p class="muted">La asignación aún no tiene datos visibles.</p>
-      </div>
-      {% endif %}
-    </article>
-  </section>
-
-  <section class="panel-card">
-    <div class="section-head section-head--tight">
-      <div>
-        <h2>Consulta rápida de cerrados</h2>
-        <p>Si indicas un número de caso, se muestran hasta 100 registros visibles para validación rápida. Para llevar todo el detalle usa la exportación.</p>
       </div>
     </div>
 
-    {% if closed_case_id %}
-      {% if closed_cases %}
-      <div class="table-wrap table-wrap--compact">
-        <table class="table table--clean table--cases">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Cerrado</th>
-              <th>Equipo</th>
-              <th>Asignado</th>
-              <th>Solicitante</th>
-              <th>Asunto</th>
-              <th>Estado</th>
-            </tr>
-          </thead>
+    {% if selected_kind == 'summary' %}
+      <div class="reports-grid">
+        <article class="reports-card">
+          <h3>Indicadores</h3>
+          <ul class="metric-list">
+            <li><span>Total casos</span><strong>{{ selected_payload.totals.total_cases or 0 }}</strong></li>
+            <li><span>Activos</span><strong>{{ selected_payload.totals.open_cases or 0 }}</strong></li>
+            <li><span>Resueltos</span><strong>{{ selected_payload.totals.resolved_cases or 0 }}</strong></li>
+            <li><span>Reabiertos</span><strong>{{ selected_payload.totals.reopened_cases or 0 }}</strong></li>
+            <li><span>Cerrados</span><strong>{{ selected_payload.totals.closed_cases or 0 }}</strong></li>
+            <li><span>Prioridad alta</span><strong>{{ selected_payload.totals.high_priority or 0 }}</strong></li>
+          </ul>
+        </article>
+      </div>
+
+      <div class="reports-table-wrap">
+        <table class="reports-table">
+          <thead><tr><th>Equipo</th><th>Total</th><th>Activos</th><th>Resueltos</th><th>Cerrados</th></tr></thead>
           <tbody>
-            {% for row in closed_cases %}
+            {% for row in selected_payload.by_team %}
             <tr>
-              <td class="cell-id"><strong>{{ row['id'] }}</strong></td>
-              <td class="cell-nowrap">{{ row['closed_at_display'] or '-' }}</td>
-              <td>{{ row['assigned_team_label'] or '-' }}</td>
-              <td>{{ row['assigned_to_name'] or '-' }}</td>
-              <td>{{ row['requester_email'] or row['requester_name'] or '-' }}</td>
-              <td>{{ row['subject'] or '-' }}</td>
-              <td class="cell-nowrap"><span class="status-pill">{{ row['status'] or '-' }}</span></td>
+              <td>{{ row.assigned_team or 'Sin equipo' }}</td>
+              <td>{{ row.total_cases or 0 }}</td>
+              <td>{{ row.open_cases or 0 }}</td>
+              <td>{{ row.resolved_cases or 0 }}</td>
+              <td>{{ row.closed_cases or 0 }}</td>
             </tr>
+            {% else %}
+            <tr><td colspan="5">No hay datos para el rango seleccionado.</td></tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
-      {% else %}
-      <div class="empty-state">
-        <div class="empty-state__title">No hay cerrados para ese filtro</div>
-        <p class="muted">Verifica el identificador y el rango de fechas.</p>
+
+      <div class="reports-grid">
+        <article class="reports-card">
+          <h3>Por estado</h3>
+          <ul class="detail-list">
+            {% for row in selected_payload.by_status %}
+            <li><span>{{ row.status or 'Sin estado' }}</span><strong>{{ row.total_cases or 0 }}</strong></li>
+            {% else %}
+            <li><span>Sin información</span><strong>0</strong></li>
+            {% endfor %}
+          </ul>
+        </article>
+        <article class="reports-card">
+          <h3>Por prioridad</h3>
+          <ul class="detail-list">
+            {% for row in selected_payload.by_priority %}
+            <li><span>{{ row.priority or 'Sin prioridad' }}</span><strong>{{ row.total_cases or 0 }}</strong></li>
+            {% else %}
+            <li><span>Sin información</span><strong>0</strong></li>
+            {% endfor %}
+          </ul>
+        </article>
+        <article class="reports-card">
+          <h3>Top responsables</h3>
+          <ul class="detail-list">
+            {% for row in selected_payload.top_owners %}
+            <li><span>{{ row.owner_name or 'Sin asignación' }}</span><strong>{{ row.total_cases or 0 }}</strong></li>
+            {% else %}
+            <li><span>Sin información</span><strong>0</strong></li>
+            {% endfor %}
+          </ul>
+        </article>
       </div>
-      {% endif %}
-    {% else %}
-      <div class="empty-state">
-        <div class="empty-state__title">Consulta opcional</div>
-        <p class="muted">Puedes exportar todos los cerrados del rango o filtrar un caso específico para revisión rápida.</p>
+
+    {% elif selected_kind == 'cases' %}
+      <div class="reports-table-wrap">
+        <table class="reports-table">
+          <thead><tr><th>ID</th><th>Estado</th><th>Prioridad</th><th>ANS resp.</th><th>ANS resol.</th><th>Equipo</th><th>Asignado a</th><th>Solicitante</th><th>Creado</th><th>Primera respuesta</th><th>Resuelto</th><th>Asunto</th></tr></thead>
+          <tbody>
+            {% for row in selected_payload.rows %}
+            <tr>
+              <td>{{ row.id }}</td>
+              <td>{{ row.status }}</td>
+              <td>{{ row.priority }}</td>
+              <td>{{ row.sla_response_text }}</td>
+              <td>{{ row.sla_resolution_text }}</td>
+              <td>{{ row.assigned_team_label or row.assigned_team }}</td>
+              <td>{{ row.assigned_to_name or '' }}</td>
+              <td>{{ row.requester_name or row.requester_email or '' }}</td>
+              <td>{{ row.created_at_display or '' }}</td>
+              <td>{{ row.first_response_at_display or '' }}</td>
+              <td>{{ row.resolved_at_display or '' }}</td>
+              <td>{{ row.subject or '' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="12">No se encontraron casos en ese rango.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+    {% elif selected_kind == 'closed' %}
+      <div class="reports-table-wrap">
+        <table class="reports-table">
+          <thead><tr><th>ID</th><th>Estado</th><th>Prioridad</th><th>Equipo</th><th>Asignado a</th><th>Solicitante</th><th>Correo</th><th>Cerrado</th><th>Creado</th><th>Asunto</th></tr></thead>
+          <tbody>
+            {% for row in selected_payload.rows %}
+            <tr>
+              <td>{{ row.id }}</td>
+              <td>{{ row.status }}</td>
+              <td>{{ row.priority }}</td>
+              <td>{{ row.assigned_team_label or row.assigned_team }}</td>
+              <td>{{ row.assigned_to_name or '' }}</td>
+              <td>{{ row.requester_name or '' }}</td>
+              <td>{{ row.requester_email or '' }}</td>
+              <td>{{ row.closed_at_display or '' }}</td>
+              <td>{{ row.created_at_display or '' }}</td>
+              <td>{{ row.subject or '' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="10">No hay casos cerrados para ese criterio.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+    {% elif selected_kind == 'survey_summary' %}
+      <div class="reports-grid">
+        <article class="reports-card">
+          <h3>Indicadores de calidad</h3>
+          <ul class="metric-list">
+            <li><span>Encuestas visibles</span><strong>{{ selected_payload.totals.total_surveys or 0 }}</strong></li>
+            <li><span>Enviadas</span><strong>{{ selected_payload.totals.sent_surveys or 0 }}</strong></li>
+            <li><span>Respondidas</span><strong>{{ selected_payload.totals.completed_surveys or 0 }}</strong></li>
+            <li><span>Pendientes</span><strong>{{ selected_payload.totals.pending_surveys or 0 }}</strong></li>
+            <li><span>Promedio</span><strong>{{ '%.2f'|format(selected_payload.totals.avg_rating or 0) }}</strong></li>
+            <li><span>Calif. baja (1-2)</span><strong>{{ selected_payload.totals.low_ratings or 0 }}</strong></li>
+            <li><span>Calif. alta (4-5)</span><strong>{{ selected_payload.totals.high_ratings or 0 }}</strong></li>
+          </ul>
+        </article>
+        <article class="reports-card">
+          <h3>Distribución por calificación</h3>
+          <ul class="detail-list">
+            {% for row in selected_payload.by_rating %}
+            <li><span>{{ row.rating }}</span><strong>{{ row.total_surveys or 0 }}</strong></li>
+            {% else %}
+            <li><span>Sin respuestas</span><strong>0</strong></li>
+            {% endfor %}
+          </ul>
+        </article>
+        <article class="reports-card">
+          <h3>Por equipo</h3>
+          <ul class="detail-list">
+            {% for row in selected_payload.by_team %}
+            <li><span>{{ row.assigned_team or 'Sin equipo' }}</span><strong>{{ row.total_surveys or 0 }}</strong></li>
+            {% else %}
+            <li><span>Sin datos</span><strong>0</strong></li>
+            {% endfor %}
+          </ul>
+        </article>
+      </div>
+
+      <div class="reports-table-wrap">
+        <table class="reports-table">
+          <thead><tr><th>Caso</th><th>Equipo</th><th>Solicitante</th><th>Correo</th><th>Enviada</th><th>Respondida</th><th>Calificación</th><th>Motivo</th><th>Estado</th></tr></thead>
+          <tbody>
+            {% for row in selected_payload.detail_rows %}
+            <tr>
+              <td>{{ row.case_id }}</td>
+              <td>{{ row.assigned_team_label or row.assigned_team }}</td>
+              <td>{{ row.requester_name or '' }}</td>
+              <td>{{ row.recipient_email or '' }}</td>
+              <td>{{ row.sent_at_display or '' }}</td>
+              <td>{{ row.completed_at_display or '' }}</td>
+              <td>{{ row.rating or '' }}</td>
+              <td>{{ row.reason or '' }}</td>
+              <td>{{ row.survey_status }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="9">No hay encuestas para ese rango.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+    {% elif selected_kind == 'survey_detail' %}
+      <div class="reports-table-wrap">
+        <table class="reports-table">
+          <thead><tr><th>Encuesta</th><th>Caso</th><th>Equipo</th><th>Asignado a</th><th>Solicitante</th><th>Correo</th><th>Enviada</th><th>Respondida</th><th>Calificación</th><th>Motivo</th><th>Estado caso</th><th>Asunto</th></tr></thead>
+          <tbody>
+            {% for row in selected_payload.rows %}
+            <tr>
+              <td>{{ row.survey_id }}</td>
+              <td>{{ row.case_id }}</td>
+              <td>{{ row.assigned_team_label or row.assigned_team }}</td>
+              <td>{{ row.assigned_to_name or '' }}</td>
+              <td>{{ row.requester_name or '' }}</td>
+              <td>{{ row.recipient_email or '' }}</td>
+              <td>{{ row.sent_at_display or '' }}</td>
+              <td>{{ row.completed_at_display or '' }}</td>
+              <td>{{ row.rating or '' }}</td>
+              <td>{{ row.reason or '' }}</td>
+              <td>{{ row.status or '' }}</td>
+              <td>{{ row.subject or '' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="12">No hay detalle de encuestas para ese rango.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+    {% elif selected_kind == 'case_lookup' %}
+      <div class="lookup-shell">
+        <div class="reports-panel lookup-table-title">
+          <h3 class="section-title">Resultados de la búsqueda</h3>
+          <p class="section-subtitle">Primero verás los casos encontrados y, debajo, el detalle organizado del caso seleccionado.</p>
+        </div>
+
+        <div class="reports-table-wrap">
+          <table class="reports-table">
+            <thead><tr><th>Caso</th><th>Estado</th><th>Prioridad</th><th>Atendido</th><th>Encuesta</th><th>Calificación</th><th>Equipo</th><th>Asignado a</th><th>Creado</th><th>Cerrado</th><th>Asunto</th></tr></thead>
+            <tbody>
+              {% for row in selected_payload.rows %}
+              <tr>
+                <td>{{ row.id }}</td>
+                <td>{{ row.status }}</td>
+                <td>{{ row.priority }}</td>
+                <td><span class="badge {% if row.was_attended %}ok{% else %}warn{% endif %}">{{ 'Sí' if row.was_attended else 'No' }}</span></td>
+                <td>{{ row.survey_status }}</td>
+                <td>{{ row.latest_survey_rating or '' }}</td>
+                <td>{{ row.assigned_team_label or row.assigned_team }}</td>
+                <td>{{ row.assigned_to_name or '' }}</td>
+                <td>{{ row.created_at_display or '' }}</td>
+                <td>{{ row.closed_at_display or '' }}</td>
+                <td>{{ row.subject or '' }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="11">No se encontraron casos con esa búsqueda.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        {% if selected_payload.selected_case %}
+        <div class="reports-panel lookup-table-title">
+          <h3 class="section-title">Detalle del caso {{ selected_payload.selected_case.id }}</h3>
+          <p class="section-subtitle">La información se agrupa por estado, solicitante, fechas, encuesta y trazabilidad para que sea más fácil de revisar.</p>
+        </div>
+
+        <div class="lookup-overview">
+          <article class="lookup-kpi">
+            <span class="lookup-kpi__label">Estado</span>
+            <strong class="lookup-kpi__value">{{ selected_payload.selected_case.status }}</strong>
+          </article>
+          <article class="lookup-kpi">
+            <span class="lookup-kpi__label">Prioridad</span>
+            <strong class="lookup-kpi__value">{{ selected_payload.selected_case.priority }}</strong>
+          </article>
+          <article class="lookup-kpi">
+            <span class="lookup-kpi__label">Atendido</span>
+            <strong class="lookup-kpi__value">{{ 'Sí' if selected_payload.selected_case.was_attended else 'No' }}</strong>
+          </article>
+          <article class="lookup-kpi">
+            <span class="lookup-kpi__label">Encuesta de calidad</span>
+            <strong class="lookup-kpi__value">{{ selected_payload.selected_case.survey_status }}</strong>
+          </article>
+          <article class="lookup-kpi">
+            <span class="lookup-kpi__label">Calificación más reciente</span>
+            <strong class="lookup-kpi__value">{{ selected_payload.selected_case.latest_survey_rating or 'Sin respuesta' }}</strong>
+          </article>
+          <article class="lookup-kpi">
+            <span class="lookup-kpi__label">Adjuntos / actualizaciones</span>
+            <strong class="lookup-kpi__value">{{ selected_payload.selected_case.attachments_count or 0 }} / {{ selected_payload.selected_case.updates_count or 0 }}</strong>
+          </article>
+        </div>
+
+        <div class="lookup-layout">
+          <div class="lookup-stack">
+            <article class="lookup-panel">
+              <h3 class="section-title">Resumen del caso</h3>
+              <ul class="lookup-list">
+                <li><span>ID del caso</span><strong>{{ selected_payload.selected_case.id }}</strong></li>
+                <li><span>Estado</span><strong>{{ selected_payload.selected_case.status }}</strong></li>
+                <li><span>Prioridad</span><strong>{{ selected_payload.selected_case.priority }}</strong></li>
+                <li><span>Equipo</span><strong>{{ selected_payload.selected_case.assigned_team_label or selected_payload.selected_case.assigned_team }}</strong></li>
+                <li><span>Asignado a</span><strong>{{ selected_payload.selected_case.assigned_to_name or '' }}</strong></li>
+                <li><span>¿Fue atendido?</span><strong>{{ 'Sí' if selected_payload.selected_case.was_attended else 'No' }}</strong></li>
+                <li><span>Estado de encuesta</span><strong>{{ selected_payload.selected_case.survey_status }}</strong></li>
+                <li><span>Calificación más reciente</span><strong>{{ selected_payload.selected_case.latest_survey_rating or 'Sin respuesta' }}</strong></li>
+              </ul>
+            </article>
+
+            <article class="lookup-panel">
+              <h3 class="section-title">Fechas clave</h3>
+              <ul class="lookup-list">
+                <li><span>Creado</span><strong>{{ selected_payload.selected_case.created_at_display or '' }}</strong></li>
+                <li><span>Primera respuesta</span><strong>{{ selected_payload.selected_case.first_response_at_display or '-' }}</strong></li>
+                <li><span>Resuelto</span><strong>{{ selected_payload.selected_case.resolved_at_display or '-' }}</strong></li>
+                <li><span>Cerrado</span><strong>{{ selected_payload.selected_case.closed_at_display or '-' }}</strong></li>
+                <li><span>Última encuesta enviada</span><strong>{{ selected_payload.selected_case.latest_survey_sent_at_display or '-' }}</strong></li>
+                <li><span>Última encuesta respondida</span><strong>{{ selected_payload.selected_case.latest_survey_completed_at_display or '-' }}</strong></li>
+              </ul>
+            </article>
+          </div>
+
+          <article class="lookup-panel lookup-panel--context">
+            <h3 class="section-title">Contexto</h3>
+            <ul class="lookup-list">
+              <li><span>Asunto</span><strong class="lookup-text">{{ selected_payload.selected_case.subject or '' }}</strong></li>
+              <li><span>Descripción</span><strong class="lookup-text">{{ selected_payload.selected_case.description or '' }}</strong></li>
+              <li><span>Solicitante</span><strong>{{ selected_payload.selected_case.requester_name or '' }}</strong></li>
+              <li><span>Correo</span><strong>{{ selected_payload.selected_case.requester_email or '' }}</strong></li>
+              <li><span>Última solución registrada</span><strong class="lookup-text">{{ selected_payload.selected_case.latest_solution_message or '' }}</strong></li>
+              <li><span>Motivo / comentario</span><strong class="lookup-text">{{ selected_payload.selected_case.latest_survey_reason or '' }}</strong></li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="reports-panel lookup-table-title">
+          <h3 class="section-title">Trazabilidad del caso</h3>
+          <p class="section-subtitle">Histórico de actualizaciones registradas para el caso.</p>
+        </div>
+        <div class="reports-table-wrap">
+          <table class="reports-table">
+            <thead><tr><th>Fecha</th><th>Autor</th><th>¿Solución?</th><th>Mensaje</th></tr></thead>
+            <tbody>
+              {% for row in selected_payload.related.updates %}
+              <tr>
+                <td>{{ row.created_at_display or '' }}</td>
+                <td>{{ row.author_name or row.author_email or '' }}</td>
+                <td>{{ 'Sí' if row.is_solution else 'No' }}</td>
+                <td>{{ row.message or '' }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="4">No hay trazabilidad registrada.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="reports-panel lookup-table-title">
+          <h3 class="section-title">Detalle de encuestas de calidad</h3>
+          <p class="section-subtitle">Histórico de envíos y respuestas de satisfacción asociados al caso.</p>
+        </div>
+        <div class="reports-table-wrap">
+          <table class="reports-table">
+            <thead><tr><th>Encuesta</th><th>Correo</th><th>Enviada</th><th>Respondida</th><th>Calificación</th><th>Motivo</th></tr></thead>
+            <tbody>
+              {% for row in selected_payload.related.surveys %}
+              <tr>
+                <td>{{ row.survey_id }}</td>
+                <td>{{ row.recipient_email or '' }}</td>
+                <td>{{ row.sent_at_display or '' }}</td>
+                <td>{{ row.completed_at_display or '' }}</td>
+                <td>{{ row.rating or '' }}</td>
+                <td>{{ row.reason or '' }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="6">El caso no tiene encuestas de calidad registradas.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
       </div>
     {% endif %}
   </section>
+</div>
 {% endblock %}
