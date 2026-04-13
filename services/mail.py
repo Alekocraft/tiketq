@@ -7,6 +7,7 @@ from email.message import EmailMessage
 from pathlib import Path
 from typing import Iterable
 
+from services.app_logging import log_event
 from services.security import bool_from_value, int_from_value, path_text, text_value
 
 DEFAULT_SUPPORT_SENDER = "sistemas@qualitascolombia.com.co"
@@ -20,6 +21,7 @@ def _first_env(*names: str, default: str | None = None) -> str | None:
     return default
 
 
+
 def _resolve_sender(explicit_sender: str | None = None) -> str:
     # Requerimiento funcional: todas las notificaciones del sistema deben salir
     # desde la cuenta de soporte TI y no desde valores heredados del .env.
@@ -27,20 +29,25 @@ def _resolve_sender(explicit_sender: str | None = None) -> str:
     return DEFAULT_SUPPORT_SENDER
 
 
+
 def _smtp_host() -> str:
     return (_first_env("SMTP_HOST", "MAIL_SERVER", "SMTP_SERVER", default="") or "").strip()
+
 
 
 def _smtp_port() -> int:
     return int_from_value(_first_env("SMTP_PORT", "MAIL_PORT", default="587"), 587)
 
 
+
 def _smtp_username() -> str:
     return _first_env("SMTP_USERNAME", "SMTP_USER", "MAIL_USERNAME", default="") or ""
 
 
+
 def _smtp_password() -> str:
     return _first_env("SMTP_PASSWORD", "MAIL_PASSWORD", default="") or ""
+
 
 
 def _attachment_content_type(path: Path, declared: str | None = None) -> tuple[str, str]:
@@ -54,6 +61,7 @@ def _attachment_content_type(path: Path, declared: str | None = None) -> tuple[s
     return "application", "octet-stream"
 
 
+
 def _iter_attachment_specs(attachments) -> Iterable[dict]:
     for item in attachments or []:
         if not item:
@@ -63,6 +71,7 @@ def _iter_attachment_specs(attachments) -> Iterable[dict]:
             continue
         if isinstance(item, dict):
             yield item
+
 
 
 def send_mail(
@@ -78,10 +87,26 @@ def send_mail(
 ) -> tuple[bool, str]:
     recipient = text_value(to_addr)
     if not recipient:
+        log_event(
+            "EMAIL",
+            "WARNING",
+            "MAIL_SKIPPED",
+            detail="destinatario vacio",
+            source="services.mail.send_mail",
+            status="DESTINATARIO_VACIO",
+        )
         return False, "DESTINATARIO_VACIO"
 
     host = _smtp_host()
     if not host:
+        log_event(
+            "EMAIL",
+            "WARNING",
+            "MAIL_SKIPPED",
+            detail="smtp host no configurado",
+            source="services.mail.send_mail",
+            status="SMTP_HOST_NO_CONFIGURADO",
+        )
         return False, "SMTP_HOST_NO_CONFIGURADO"
 
     sender = _resolve_sender(from_addr)
@@ -106,7 +131,9 @@ def send_mail(
     else:
         msg.set_content(text_body)
 
-    for spec in _iter_attachment_specs(attachments):
+    attachment_specs = list(_iter_attachment_specs(attachments))
+    attached_files = 0
+    for spec in attachment_specs:
         raw_path = text_value(spec.get("path") or spec.get("stored_path"))
         if not raw_path:
             continue
@@ -118,6 +145,7 @@ def send_mail(
         with path.open("rb") as fh:
             payload = fh.read()
         msg.add_attachment(payload, maintype=maintype, subtype=subtype, filename=filename)
+        attached_files += 1
 
     recipients = [addr.strip() for addr in recipient.split(",") if addr.strip()]
     if cc:
@@ -140,7 +168,35 @@ def send_mail(
                 if username:
                     server.login(username, password)
                 server.send_message(msg, from_addr=sender, to_addrs=recipients)
-    except Exception:
+    except Exception as exc:
+        log_event(
+            "EMAIL",
+            "ERROR",
+            "MAIL_SEND_FAILED",
+            detail=type(exc).__name__,
+            source="services.mail.send_mail",
+            status="MAIL_SEND_FAILED",
+            metadata={
+                "recipients": len(recipients),
+                "attachments": attached_files,
+                "tls": use_tls,
+                "ssl": use_ssl,
+            },
+        )
         return False, "MAIL_SEND_FAILED"
 
+    log_event(
+        "EMAIL",
+        "INFO",
+        "MAIL_SENT",
+        detail="envio completado",
+        source="services.mail.send_mail",
+        status="OK",
+        metadata={
+            "recipients": len(recipients),
+            "attachments": attached_files,
+            "tls": use_tls,
+            "ssl": use_ssl,
+        },
+    )
     return True, "OK"

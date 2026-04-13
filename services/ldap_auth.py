@@ -29,6 +29,7 @@ from config.ldap_config import (
     LDAP_SERVICE_USER,
     LDAP_USE_SSL,
 )
+from services.app_logging import log_event
 from services.security import sanitizar_log_text, text_value
 
 logger = logging.getLogger(__name__)
@@ -422,10 +423,16 @@ def _service_bind() -> Connection:
 def _log_directory_service_error(operation: str, detail: str = "") -> None:
     sanitized_op = sanitizar_log_text(operation, default="unknown_operation")
     sanitized_detail = sanitizar_log_text(detail, default="")
-    if sanitized_detail:
-        logger.error("directory_service_error:%s:%s", sanitized_op, sanitized_detail)
-    else:
-        logger.error("directory_service_error:%s", sanitized_op)
+    event_detail = sanitized_op if not sanitized_detail else f"{sanitized_op}:{sanitized_detail}"
+    log_event(
+        "SECURITY",
+        "ERROR",
+        "DIRECTORY_SERVICE_ERROR",
+        detail=event_detail,
+        source="services.ldap_auth",
+        status="DIRECTORY_SERVICE_UNAVAILABLE",
+        persist_db=False,
+    )
 
 
 def _bind_candidates(username: str, user_info: dict) -> Iterable[Tuple[str, Optional[str]]]:
@@ -477,7 +484,7 @@ def test_connection():
         conn.unbind()
         return True, "OK"
     except Exception as exc:
-        _log_directory_service_error("test_connection", detail=str(exc))
+        _log_directory_service_error("test_connection", detail=type(exc).__name__)
         return False, "DIRECTORY_SERVICE_UNAVAILABLE"
 
 
@@ -524,7 +531,7 @@ def search_user(username: str):
         conn.unbind()
         return True, result
     except Exception as exc:
-        _log_directory_service_error("search_user", detail=str(exc))
+        _log_directory_service_error("search_user", detail=type(exc).__name__)
         return False, LDAP_PUBLIC_ERROR.copy()
 
 

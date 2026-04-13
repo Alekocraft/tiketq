@@ -1,35 +1,80 @@
 {% extends "layout.html" %}
 {% block content %}
-  <section class="hero-panel hero-panel--compact">
+  <section class="hero-panel hero-panel--compact hero-panel--notifications">
     <div>
       <div class="hero-panel__eyebrow">Seguimiento</div>
       <h1>Notificaciones</h1>
-      <p>Consolidado de alertas operativas y recordatorios del sistema.</p>
+      <p>Consolidado visual de alertas operativas, recordatorios y eventos del sistema con lectura rápida por prioridad.</p>
     </div>
-    <div class="hero-panel__actions">
-      <button class="btn btn-secondary" id="markReadBtn" type="button">Marcar todo como leído</button>
+    <div class="hero-panel__actions hero-panel__actions--notifications">
+      <div class="notification-kpis notification-kpis--hero">
+        <div class="notification-kpis__item">
+          <span class="notification-kpis__label">Total</span>
+          <strong class="notification-kpis__value" data-summary-total>{{ notification_summary.total }}</strong>
+        </div>
+        <div class="notification-kpis__item notification-kpis__item--accent">
+          <span class="notification-kpis__label">Sin leer</span>
+          <strong class="notification-kpis__value" data-summary-unread>{{ notification_summary.unread }}</strong>
+        </div>
+        <div class="notification-kpis__item notification-kpis__item--neutral">
+          <span class="notification-kpis__label">Leídas</span>
+          <strong class="notification-kpis__value" data-summary-read>{{ notification_summary.read }}</strong>
+        </div>
+      </div>
+      <div class="notification-actions">
+        <button class="btn btn-secondary" id="markReadBtn" type="button" {% if not notification_summary.unread %}disabled{% endif %}>Marcar todo como leído</button>
+        <span class="helper" id="markReadStatus">{% if notification_summary.unread %}Tienes alertas pendientes de revisar.{% else %}Todo está al día.{% endif %}</span>
+      </div>
     </div>
   </section>
 
-  <section class="panel-card">
+  <section class="panel-card panel-card--notifications">
+    <div class="notification-toolbar">
+      <div>
+        <h2>Resumen clasificado</h2>
+        <p class="muted">Cada alerta usa la paleta corporativa para diferenciar contexto, urgencia y estado.</p>
+      </div>
+      {% if notification_summary.highlights %}
+        <div class="notification-highlight-row">
+          {% for item in notification_summary.highlights %}
+            <span class="notification-highlight notification-highlight--{{ item.tone }}">{{ item.label }} · {{ item.count }}</span>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+
     {% if notifications %}
-      <div class="notification-list">
+      <div class="notification-list" id="notificationList">
         {% for n in notifications %}
-          <article class="notification-card {% if not n['is_read'] %}notification-card--unread{% endif %}">
-            <div class="notification-card__header">
-              <div>
-                <strong>{{ n['title'] }}</strong>
-                <div class="muted">{{ n['created_at'] }}</div>
+          <article class="notification-card notification-card--{{ n['visual']['tone'] }} {% if not n['is_read'] %}notification-card--unread{% else %}notification-card--read{% endif %}" data-notification-id="{{ n['id'] }}">
+            <div class="notification-card__accent" aria-hidden="true"></div>
+            <div class="notification-card__icon notification-card__icon--{{ n['visual']['tone'] }}" aria-hidden="true">{{ n['visual']['icon'] }}</div>
+            <div class="notification-card__body">
+              <div class="notification-card__header">
+                <div class="notification-card__title-group">
+                  <div class="notification-card__badges">
+                    <span class="notification-type notification-type--{{ n['visual']['tone'] }}">{{ n['visual']['label'] }}</span>
+                    {% if not n['is_read'] %}<span class="notification-state notification-state--new">Nueva</span>{% else %}<span class="notification-state">Leída</span>{% endif %}
+                  </div>
+                  <strong>{{ n['title'] }}</strong>
+                  <div class="muted">{{ n['created_at_text'] }}</div>
+                </div>
+                {% if n['case_id'] %}<span class="notification-case-ref">{{ n['case_id'] }}</span>{% endif %}
               </div>
-              {% if not n['is_read'] %}<span class="badge">Nuevo</span>{% endif %}
+              <p>{{ n['body'] or 'Sin detalle adicional.' }}</p>
+              <div class="notification-card__footer">
+                {% if n['case_id'] %}<a class="table-link" href="{{ url_for('cases.case_detail', case_id=n['case_id']) }}">Abrir caso {{ n['case_id'] }}</a>{% endif %}
+                <span class="muted">Tipo interno: {{ n['type'] or 'general' }}</span>
+              </div>
             </div>
-            <p>{{ n['body'] or '' }}</p>
-            {% if n['case_id'] %}<a class="table-link" href="{{ url_for('cases.case_detail', case_id=n['case_id']) }}">Abrir caso {{ n['case_id'] }}</a>{% endif %}
           </article>
         {% endfor %}
       </div>
     {% else %}
-      <div class="empty-state"><div class="empty-state__title">No tienes notificaciones pendientes</div><p class="muted">Cuando existan alertas operativas aparecerán aquí.</p></div>
+      <div class="empty-state empty-state--notifications">
+        <div class="empty-state__title">No tienes notificaciones pendientes</div>
+        <p class="muted">Cuando existan alertas operativas aparecerán aquí con su clasificación visual.</p>
+      </div>
     {% endif %}
   </section>
 {% endblock %}

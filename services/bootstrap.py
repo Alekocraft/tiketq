@@ -62,6 +62,24 @@ def ensure_schema() -> None:
                 CONSTRAINT CK_case_surveys_rating CHECK (rating IS NULL OR rating BETWEEN 1 AND 5)
             );
         END;
+
+        IF OBJECT_ID('dbo.app_logs', 'U') IS NULL
+        BEGIN
+            CREATE TABLE dbo.app_logs(
+                id BIGINT IDENTITY(1,1) NOT NULL,
+                category NVARCHAR(30) NOT NULL,
+                level NVARCHAR(16) NOT NULL,
+                event_name NVARCHAR(80) NOT NULL,
+                detail NVARCHAR(240) NOT NULL,
+                source_name NVARCHAR(80) NOT NULL,
+                user_id NVARCHAR(120) NULL,
+                case_id NVARCHAR(30) NULL,
+                status_code NVARCHAR(80) NULL,
+                metadata_json NVARCHAR(1000) NULL,
+                created_at DATETIME2(7) NOT NULL CONSTRAINT DF_app_logs_created_at DEFAULT(SYSDATETIME()),
+                CONSTRAINT PK_app_logs PRIMARY KEY CLUSTERED (id ASC)
+            );
+        END;
         """
     )
 
@@ -111,6 +129,25 @@ def ensure_schema() -> None:
             ALTER TABLE dbo.case_surveys WITH CHECK
             ADD CONSTRAINT FK_case_surveys_case FOREIGN KEY(case_id)
             REFERENCES dbo.cases(id);
+        END;
+
+        IF NOT EXISTS (
+            SELECT 1 FROM sys.indexes
+            WHERE name = 'IX_app_logs_category_created' AND object_id = OBJECT_ID('dbo.app_logs')
+        )
+        BEGIN
+            CREATE NONCLUSTERED INDEX IX_app_logs_category_created
+                ON dbo.app_logs(category ASC, created_at DESC);
+        END;
+
+        IF NOT EXISTS (
+            SELECT 1 FROM sys.indexes
+            WHERE name = 'IX_app_logs_case_created' AND object_id = OBJECT_ID('dbo.app_logs')
+        )
+        BEGIN
+            CREATE NONCLUSTERED INDEX IX_app_logs_case_created
+                ON dbo.app_logs(case_id ASC, created_at DESC)
+                WHERE case_id IS NOT NULL;
         END;
         """
     )

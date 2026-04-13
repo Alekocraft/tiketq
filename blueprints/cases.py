@@ -21,6 +21,7 @@ from flask import (
 )
 from flask_login import current_user, login_required
 
+from services.app_logging import log_event
 from services.db import commit, execute, get_db, rollback, select_all, select_one
 from services.ldap_auth import search_user
 from services.mail import send_mail
@@ -237,6 +238,37 @@ def _notif_count() -> int:
         (current_user.username,),
     )
     return int(row["c"]) if row and row.get("c") is not None else 0
+
+
+def _notification_visual(notification_type: str | None) -> dict:
+    normalized = normalize_role(notification_type or "")
+    tokens = set((normalized or "info").split("_"))
+
+    if {"security", "seguridad", "auth", "acceso"} & tokens:
+        return {"label": "Seguridad", "tone": "security", "icon": "🛡️"}
+    if {"warning", "alerta", "critico", "critical", "sla", "urgent"} & tokens:
+        return {"label": "Alerta", "tone": "warning", "icon": "⚠️"}
+    if {"success", "resolved", "resuelto", "ok", "done", "close", "cerrado"} & tokens:
+        return {"label": "Completado", "tone": "success", "icon": "✓"}
+    if {"case", "ticket", "caso", "update", "asignado", "reabierto"} & tokens:
+        return {"label": "Caso", "tone": "case", "icon": "📌"}
+    return {"label": "Información", "tone": "info", "icon": "ℹ️"}
+
+
+def _notification_summary(rows: list[dict]) -> dict:
+    total = len(rows)
+    unread = sum(1 for row in rows if not bool(row.get("is_read")))
+    read = total - unread
+    grouped: dict[str, dict] = {}
+    for row in rows:
+        visual = row.get("visual") or _notification_visual(row.get("type"))
+        key = visual["label"]
+        if key not in grouped:
+            grouped[key] = {"label": visual["label"], "tone": visual["tone"], "count": 0}
+        grouped[key]["count"] += 1
+
+    highlights = sorted(grouped.values(), key=lambda item: (-item["count"], item["label"]))[:4]
+    return {"total": total, "unread": unread, "read": read, "highlights": highlights}
 
 
 def _role_scope_labels() -> list[str]:
@@ -734,6 +766,17 @@ def _handle_status_change(case_id: str, case_row: dict, action: str, note: str, 
             _save_uploaded_files(case_id, upload_files, update_id=update_id)
             flash(f"El caso {case_id} fue reabierto.", "success")
         commit()
+        log_event(
+            "CASE",
+            "INFO",
+            "CASE_STATUS_CHANGED",
+            detail=f"accion {action}",
+            source="cases._handle_status_change",
+            user_id=current_user.username,
+            case_id=case_id,
+            status="OK",
+            metadata={"attachments": len(saved_files) if action == "resolve" else 0},
+        )
         if notify_result:
             ok, detail = _notify_requester_case_resolved(*notify_result)
             if ok:
@@ -742,6 +785,16 @@ def _handle_status_change(case_id: str, case_row: dict, action: str, note: str, 
                 flash(f"El caso quedó resuelto, pero no fue posible enviar la notificación: {public_mail_message()}", "warning")
     except Exception as exc:
         rollback()
+        log_event(
+            "CASE",
+            "ERROR",
+            "CASE_STATUS_CHANGE_FAILED",
+            detail=type(exc).__name__,
+            source="cases._handle_status_change",
+            user_id=current_user.username,
+            case_id=case_id,
+            status="FAILED",
+        )
         flash(public_error_message("No fue posible actualizar el caso."), "error")
     return _redirect_case_detail(case_id)
 
@@ -1008,11 +1061,19 @@ def notifications():
         (current_user.username, limit),
     )
 
+    for row in notifications_rows:
+        visual = _notification_visual(row.get("type"))
+        row["visual"] = visual
+        row["created_at_text"] = _fmt_dt(row.get("created_at"))
+
+    summary = _notification_summary(notifications_rows)
+
     return render_template(
         "cases/notifications.html",
         title="Notificaciones",
         notifications=notifications_rows,
         notif_count=_notif_count(),
+        notification_summary=summary,
         limit=limit,
     )
 
@@ -1020,12 +1081,23 @@ def notifications():
 @cases_bp.route("/notifications/mark-read", methods=["POST"])
 @login_required
 def notifications_mark_read():
-    execute(
+    cur = execute(
         "UPDATE dbo.notifications SET is_read=1, read_at=SYSDATETIME() WHERE user_id=? AND is_read=0",
         (current_user.username,),
     )
+    affected = int(getattr(cur, "rowcount", 0) or 0)
     commit()
-    return jsonify(ok=True)
+    log_event(
+        "NOTIFICATION",
+        "INFO",
+        "NOTIFICATIONS_MARKED_READ",
+        detail="notificaciones actualizadas",
+        source="cases.notifications_mark_read",
+        user_id=current_user.username,
+        status="OK",
+        metadata={"affected": affected},
+    )
+    return jsonify(ok=True, affected=affected)
 
 
 @cases_bp.route("/admin/users/legacy", methods=["GET", "POST"])
@@ -1100,6 +1172,16 @@ def case_survey(token):
                         ),
                     )
                     commit()
+                    log_event(
+                        "AUDIT",
+                        "INFO",
+                        "SURVEY_COMPLETED",
+                        detail=f"calificacion {rating}",
+                        source="cases.survey",
+                        case_id=survey["case_id"],
+                        status="OK",
+                        metadata={"rating": rating, "has_reason": bool(reason)},
+                    )
                     success_message = "Gracias por responder la encuesta."
                     survey = select_one(
                         """

@@ -27,14 +27,23 @@ _PRIORITY_ALIASES = {
 
 
 def priority_choices() -> list[dict]:
+    ordered = [
+        ('P1', 'P1'),
+        ('P2', 'P2'),
+        ('P3', 'P3'),
+        ('P4', 'P4'),
+        ('ALTA', 'Alta'),
+        ('MEDIA', 'Media'),
+        ('BAJA', 'Baja'),
+    ]
     return [
-        {'key': 'P1', 'label': 'P1'},
-        {'key': 'P2', 'label': 'P2'},
-        {'key': 'P3', 'label': 'P3'},
-        {'key': 'P4', 'label': 'P4'},
-        {'key': 'ALTA', 'label': 'Alta'},
-        {'key': 'MEDIA', 'label': 'Media'},
-        {'key': 'BAJA', 'label': 'Baja'},
+        {
+            'key': key,
+            'label': label,
+            'response_min': _PRIORITY_DEFAULTS[key][0],
+            'resolution_min': _PRIORITY_DEFAULTS[key][1],
+        }
+        for key, label in ordered
     ]
 
 

@@ -19,7 +19,7 @@
             <img src="{{ url_for('static', filename='Qualitas_Logo.svg') }}" alt="SolucionaTI" class="brand__logo">
           </span>
           <span class="brand__copy">
-            <span class="brand__eyebrow">Mesa de ayuda</span>
+            
             <span class="brand__title">SolucionaTI</span>
           </span>
         </a>
@@ -31,10 +31,10 @@
           </form>
           {% endif %}
 
-          <a class="notif-bell" href="/notifications" aria-label="Notificaciones">
+          <a class="notif-bell {% if notif_count and notif_count|int > 0 %}notif-bell--active{% endif %}" href="/notifications" aria-label="Notificaciones">
             <span class="notif-bell__icon">🔔</span>
             {% if notif_count and notif_count|int > 0 %}
-            <span class="notif-bell__badge">{{ notif_count }}</span>
+            <span class="notif-bell__badge" data-notif-count-badge>{{ notif_count }}</span>
             {% endif %}
           </a>
 
@@ -87,7 +87,7 @@
             <span class="sidebar-link__label">Notificaciones</span>
             <span class="sidebar-link__meta">Seguimiento operativo</span>
             {% if notif_count and notif_count|int > 0 %}
-              <span class="sidebar-link__badge">{{ notif_count }}</span>
+              <span class="sidebar-link__badge" data-notif-count-badge>{{ notif_count }}</span>
             {% endif %}
           </a>
 

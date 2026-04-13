@@ -1,0 +1,33 @@
+SECURITY VALIDATION REPORT
+================================================================================
+Root: C:\Users\sinventarios\source\repos\casos_prue
+Total findings: 4
+
+Resumen por regla:
+  -   2  CWE-117: Unvalidated untrusted input in log
+  -   2  CWE-209: Avoid sensitive information exposure through error messages
+
+Resumen por archivo (top 20):
+  -   4  services/ldap_auth.py
+
+Detalle:
+--------------------------------------------------------------------------------
+[ERROR] CWE-117: Unvalidated untrusted input in log
+  services/ldap_auth.py:426
+  logger.* pasa argumento no sanitizado a formato %s/{}. Envolvelo con sanitizar_log_text(...) o sanitizador específico.
+  >0426:         logger.error("directory_service_error:%s:%s", sanitized_op, sanitized_detail)
+
+[ERROR] CWE-117: Unvalidated untrusted input in log
+  services/ldap_auth.py:428
+  logger.* pasa argumento no sanitizado a formato %s/{}. Envolvelo con sanitizar_log_text(...) o sanitizador específico.
+  >0428:         logger.error("directory_service_error:%s", sanitized_op)
+
+[ERROR] CWE-209: Avoid sensitive information exposure through error messages
+  services/ldap_auth.py:480
+  Fuga de detalle técnico detectada en error/log: str(e)
+  >0480:         _log_directory_service_error("test_connection", detail=str(exc))
+
+[ERROR] CWE-209: Avoid sensitive information exposure through error messages
+  services/ldap_auth.py:527
+  Fuga de detalle técnico detectada en error/log: str(e)
+  >0527:         _log_directory_service_error("search_user", detail=str(exc))

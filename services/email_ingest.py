@@ -9,6 +9,7 @@ from typing import Optional
 from flask import current_app
 
 from services.db import commit, execute, rollback, select_one
+from services.app_logging import log_event
 from services.case_id import next_case_id
 from services.sla import compute_due_dates, get_priority_defaults, normalize_priority
 from services.mail import send_mail
@@ -345,6 +346,15 @@ def ingest_unseen():
                     )
                     commit()
                     linked += 1
+                    log_event(
+                        "CASE",
+                        "INFO",
+                        "EMAIL_LINKED_TO_CASE",
+                        detail="correo asociado a caso existente",
+                        source="services.email_ingest",
+                        case_id=referenced_case["id"],
+                        status="LINKED",
+                    )
                 else:
                     case_id = next_case_id(now=now)
                     prio = normalize_priority("MEDIA")
@@ -402,6 +412,15 @@ def ingest_unseen():
                     _save_outlook_attachments(case_id, attachments, update_id=None)
                     commit()
                     created += 1
+                    log_event(
+                        "CASE",
+                        "INFO",
+                        "CASE_CREATED_FROM_EMAIL",
+                        detail="caso creado desde outlook",
+                        source="services.email_ingest",
+                        case_id=case_id,
+                        status="CREATED",
+                    )
 
                     if from_email:
                         try:
@@ -418,8 +437,17 @@ def ingest_unseen():
                             )
                         except Exception:
                             pass
-            except Exception:
+            except Exception as exc:
                 rollback()
+                log_event(
+                    "EMAIL",
+                    "ERROR",
+                    "EMAIL_INGEST_ITEM_FAILED",
+                    detail=type(exc).__name__,
+                    source="services.email_ingest",
+                    case_id=referenced_case_id or None,
+                    status="FAILED",
+                )
                 continue
 
             if mark_as_read and unread:

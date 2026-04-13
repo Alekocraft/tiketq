@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from flask import Flask, redirect, url_for
 from flask_login import LoginManager, current_user
 
+from services.app_logging import configure_logging, log_event
 from services.security import bool_from_value, dev_ssl_context, int_from_value
 from services.roles import has_effective_role, normalize_roles
 
@@ -31,6 +32,7 @@ def _should_start_background_workers() -> bool:
 def create_app() -> Flask:
     app = Flask(__name__)
     app.secret_key = os.getenv("SECRET_KEY", os.urandom(32))
+    configure_logging(app)
 
     from services.db import close_db, select_all, select_one
     app.teardown_appcontext(close_db)
@@ -111,10 +113,18 @@ def create_app() -> Flask:
         from services.case_automation import run_case_automation
 
         ensure_schema()
+        log_event("SYSTEM", "INFO", "APP_STARTUP", source="app.create_app", status="READY")
         try:
             run_case_automation()
-        except Exception:
-            pass
+        except Exception as exc:
+            log_event(
+                "SYSTEM",
+                "WARNING",
+                "CASE_AUTOMATION_BOOT_FAILURE",
+                detail=type(exc).__name__,
+                source="app.create_app",
+                status="BACKGROUND_INIT_FAILED",
+            )
 
     def _bg_ingest_loop():
         from services.email_ingest import ingest_unseen
@@ -124,8 +134,16 @@ def create_app() -> Flask:
             try:
                 with app.app_context():
                     ingest_unseen()
-            except Exception:
-                pass
+            except Exception as exc:
+                with app.app_context():
+                    log_event(
+                        "SYSTEM",
+                        "ERROR",
+                        "EMAIL_INGEST_BACKGROUND_FAILURE",
+                        detail=type(exc).__name__,
+                        source="app.bg_ingest_loop",
+                        status="FAILED",
+                    )
             time.sleep(max(10, interval))
 
     def _bg_case_automation_loop():
@@ -136,8 +154,16 @@ def create_app() -> Flask:
             try:
                 with app.app_context():
                     run_case_automation()
-            except Exception:
-                pass
+            except Exception as exc:
+                with app.app_context():
+                    log_event(
+                        "SYSTEM",
+                        "ERROR",
+                        "CASE_AUTOMATION_BACKGROUND_FAILURE",
+                        detail=type(exc).__name__,
+                        source="app.bg_case_automation_loop",
+                        status="FAILED",
+                    )
             time.sleep(max(30, interval))
 
     if _should_start_background_workers():
