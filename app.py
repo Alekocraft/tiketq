@@ -121,7 +121,7 @@ def create_app() -> Flask:
                 "SYSTEM",
                 "WARNING",
                 "CASE_AUTOMATION_BOOT_FAILURE",
-                detail=type(exc).__name__,
+                detail="UNEXPECTED_ERROR",
                 source="app.create_app",
                 status="BACKGROUND_INIT_FAILED",
             )
@@ -140,7 +140,7 @@ def create_app() -> Flask:
                         "SYSTEM",
                         "ERROR",
                         "EMAIL_INGEST_BACKGROUND_FAILURE",
-                        detail=type(exc).__name__,
+                        detail="UNEXPECTED_ERROR",
                         source="app.bg_ingest_loop",
                         status="FAILED",
                     )
@@ -160,7 +160,7 @@ def create_app() -> Flask:
                         "SYSTEM",
                         "ERROR",
                         "CASE_AUTOMATION_BACKGROUND_FAILURE",
-                        detail=type(exc).__name__,
+                        detail="UNEXPECTED_ERROR",
                         source="app.bg_case_automation_loop",
                         status="FAILED",
                     )

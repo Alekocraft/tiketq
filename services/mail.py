@@ -173,7 +173,7 @@ def send_mail(
             "EMAIL",
             "ERROR",
             "MAIL_SEND_FAILED",
-            detail=type(exc).__name__,
+            detail="MAIL_TRANSPORT_ERROR",
             source="services.mail.send_mail",
             status="MAIL_SEND_FAILED",
             metadata={

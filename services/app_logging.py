@@ -108,12 +108,12 @@ def _log_dir_from_app(app=None) -> Path:
     if configured:
         path = Path(configured)
         if not path.is_absolute() and app is not None:
-            path = Path(app.root_path) / path
+            path = Path(app.instance_path) / path
         return path
 
     if app is not None:
-        return Path(app.root_path) / "logs"
-    return Path.cwd() / "logs"
+        return Path(app.instance_path) / "logs"
+    return Path.cwd() / "instance" / "logs"
 
 
 
@@ -139,7 +139,7 @@ def configure_logging(app) -> None:
         base_logger.addHandler(console_handler)
 
         combined_handler = RotatingFileHandler(
-            log_dir / "application.txt",
+            log_dir / "application.log",
             maxBytes=1_048_576,
             backupCount=5,
             encoding="utf-8",
@@ -152,7 +152,7 @@ def configure_logging(app) -> None:
 
         for category in LOG_CATEGORIES:
             category_handler = RotatingFileHandler(
-                log_dir / f"{category.lower()}.txt",
+                log_dir / f"{category.lower()}.log",
                 maxBytes=524_288,
                 backupCount=4,
                 encoding="utf-8",
@@ -303,7 +303,7 @@ def log_exception(
         category,
         "ERROR",
         event,
-        detail=type(exc).__name__,
+        detail="UNEXPECTED_ERROR",
         source=source,
         user_id=user_id,
         case_id=case_id,

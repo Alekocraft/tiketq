@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import os
 import secrets
-from typing import Any
 import socket
+from typing import Any
 
-from flask import has_request_context, request, current_app
+from flask import current_app, has_app_context, has_request_context, request
 
 from services.db import commit, execute, rollback, select_all, select_one
 from services.mail import send_mail
@@ -17,77 +17,38 @@ AUTO_CLOSE_NOTE = (
 )
 
 
-def _candidate_private_ips() -> list[str]:
-    candidates: list[str] = []
-
-    try:
-        hostname = socket.gethostname()
-        for info in socket.getaddrinfo(hostname, None, socket.AF_INET):
-            ip = info[4][0]
-            if ip and not ip.startswith("127.") and ip not in candidates:
-                candidates.append(ip)
-    except Exception:
-        pass
-
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-            sock.connect(("8.8.8.8", 80))
-            ip = sock.getsockname()[0]
-            if ip and not ip.startswith("127.") and ip not in candidates:
-                candidates.insert(0, ip)
-    except Exception:
-        pass
-
-    return candidates
-
-
-def _request_base_url() -> str:
-    if not has_request_context():
-        return ""
-    try:
-        host_url = (request.host_url or "").rstrip("/")
-        if host_url and "localhost" not in host_url and "127.0.0.1" not in host_url:
-            return host_url
-    except Exception:
-        return ""
-    return ""
-
-
-def _configured_server_name_url() -> str:
-    try:
-        server_name = text_value(current_app.config.get("SERVER_NAME"))
-        if not server_name:
-            return ""
-        scheme = text_value(current_app.config.get("PREFERRED_URL_SCHEME"), "http") or "http"
-        return f"{scheme}://{server_name.rstrip('/')}"
-    except Exception:
-        return ""
-
-
 def _public_base_url() -> str:
-    base = text_value(os.getenv("PUBLIC_BASE_URL") or os.getenv("APP_BASE_URL")).rstrip("/")
+    base = text_value(
+        os.getenv("PUBLIC_BASE_URL")
+        or os.getenv("APP_BASE_URL")
+        or os.getenv("APP_PUBLIC_URL")
+    ).rstrip("/")
     if base:
         return base
 
-    host = text_value(os.getenv("PUBLIC_HOST")).rstrip("/")
+    preferred_scheme = text_value(os.getenv("PUBLIC_SCHEME") or os.getenv("PREFERRED_URL_SCHEME"), "http") or "http"
+    port = text_value(os.getenv("PORT"), "5020") or "5020"
+
+    host = text_value(os.getenv("PUBLIC_HOST") or os.getenv("APP_HOST") or os.getenv("SERVER_NAME")).rstrip("/")
     if host:
         if host.startswith("http://") or host.startswith("https://"):
             return host
-        return f"http://{host}"
+        return f"{preferred_scheme}://{host}"
 
-    request_base = _request_base_url()
-    if request_base:
-        return request_base
+    if has_request_context():
+        return request.host_url.rstrip("/")
 
-    configured_server = _configured_server_name_url()
-    if configured_server:
-        return configured_server
+    if has_app_context():
+        server_name = text_value(current_app.config.get("SERVER_NAME")).rstrip("/")
+        if server_name:
+            scheme = text_value(current_app.config.get("PREFERRED_URL_SCHEME"), preferred_scheme) or preferred_scheme
+            return f"{scheme}://{server_name}"
 
-    port = text_value(os.getenv("PORT"), "5020") or "5020"
-    for ip in _candidate_private_ips():
-        return f"http://{ip}:{port}"
+    hostname = text_value(socket.gethostname()).strip().rstrip("/")
+    if hostname and hostname.lower() not in {"localhost", "127.0.0.1"}:
+        return f"{preferred_scheme}://{hostname}:{port}"
 
-    return f"http://10.60.0.73:{port}"
+    return f"{preferred_scheme}://localhost:{port}"
 
 
 def survey_link(token: str) -> str:
@@ -167,7 +128,7 @@ def _survey_mail_body(case_row: dict[str, Any], survey_row: dict[str, Any]) -> s
         f"{link}\n\n"
         "Si tu calificación es menor a 3, podrás indicarnos de manera opcional el motivo.\n\n"
         "Gracias,\n"
-        "SoliucionaTI Qualitas"
+        "Mesa de ayuda Qualitas"
     )
 
 
