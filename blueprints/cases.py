@@ -6,6 +6,9 @@ import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
+from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
+from urllib.request import Request as UrlRequest, urlopen
 
 from flask import (
     Blueprint,
@@ -18,6 +21,7 @@ from flask import (
     request,
     send_file,
     url_for,
+    Response,
 )
 from flask_login import current_user, login_required
 
@@ -26,7 +30,7 @@ from services.db import commit, execute, get_db, rollback, select_all, select_on
 from services.ldap_auth import search_user
 from services.mail import send_mail
 from services.security import path_text, public_error_message, public_mail_message, secure_status_code, text_value
-from services.roles import can_access_general_cases, can_ingest, can_resolve, can_triage, is_admin, normalize_role, normalize_roles, role_choices, role_label, team_aliases_for_roles, triage_targets_for_roles
+from services.roles import can_access_general_cases, can_access_sarlaft, can_ingest, can_resolve, can_triage, is_admin, normalize_role, normalize_roles, role_choices, role_label, team_aliases_for_roles, triage_targets_for_roles
 from services.sla import compute_due_dates, get_priority_defaults, humanize_minutes, normalize_priority, priority_choices
 
 cases_bp = Blueprint("cases", __name__, url_prefix="")
@@ -38,6 +42,49 @@ HIDDEN_STATUSES = {"cerrado"}
 FINAL_STATUSES = RESOLVED_STATUSES | HIDDEN_STATUSES
 PRIORITY_CHOICES = [choice["key"] for choice in priority_choices()]
 _ATTACHMENT_NAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
+
+SARLAFT_PORTAL_URL = "https://teams.microsoft.com/v2/"
+SARLAFT_OFFICES = [
+    "COQ",
+    "PEPE SIERRA",
+    "POLO CLUB",
+    "NOGAL",
+    "TUNJA",
+    "CARTAGENA",
+    "MORATO",
+    "MEDELLÍN",
+    "CEDRITOS",
+    "LOURDES",
+    "CALI",
+    "PEREIRA",
+    "NEIVA",
+    "KENNEDY",
+    "BUCARAMANGA",
+    "USAQUEN",
+    "BARRANQUILLA",
+    "SANTA MARTA",
+    "ENVIGADO",
+]
+SARLAFT_TOPICS = [
+    {"key": "consulta1", "label": "Consulta 1"},
+    {"key": "consulta2", "label": "Consulta 2"},
+]
+SARLAFT_TOPIC_KEYS = {item["key"] for item in SARLAFT_TOPICS}
+SARLAFT_EXTERNAL_WINDOW_HOST_HINTS = (
+    'microsoft.com',
+    'microsoftonline.com',
+    'office.com',
+    'live.com',
+    'teams.microsoft.com',
+)
+SARLAFT_EXTERNAL_WINDOW_PATH_HINTS = (
+    'login',
+    'signin',
+    'sign-in',
+    'oauth',
+    'authorize',
+    'auth',
+)
 
 
 def _fetchall_dict(cur):
@@ -81,6 +128,364 @@ def _can_ingest() -> bool:
 
 def _can_resolve() -> bool:
     return can_resolve(_current_roles())
+
+
+def _can_access_sarlaft_module() -> bool:
+    return can_access_sarlaft(_current_roles())
+
+
+def _force_https_url(value: str) -> str:
+    candidate = (value or '').strip()
+    if not candidate:
+        return ''
+    parsed = urlsplit(candidate)
+    if parsed.scheme == 'https':
+        return candidate
+    if parsed.scheme == 'http':
+        return parsed._replace(scheme='https').geturl()
+    return candidate
+
+
+def _sarlaft_portal_url() -> str:
+    configured = (os.getenv('SARLAFT_PORTAL_URL') or os.getenv('SARLAFT_IFRAME_URL') or SARLAFT_PORTAL_URL).strip() or SARLAFT_PORTAL_URL
+    return _force_https_url(configured) or SARLAFT_PORTAL_URL
+
+
+def _sarlaft_allowed_host() -> str:
+    return (urlsplit(_sarlaft_portal_url()).netloc or '').lower()
+
+
+def _sarlaft_requires_external_window(target_url: str | None) -> bool:
+    candidate = _force_https_url(target_url or '')
+    if not candidate:
+        return False
+    parsed = urlsplit(candidate)
+    host = (parsed.netloc or '').lower()
+    path_and_query = f"{parsed.path or ''}?{parsed.query or ''}".lower()
+    if any(hint in host for hint in SARLAFT_EXTERNAL_WINDOW_HOST_HINTS):
+        return True
+    return any(token in path_and_query for token in SARLAFT_EXTERNAL_WINDOW_PATH_HINTS)
+
+
+def _normalize_sarlaft_target(raw_target: str | None) -> str:
+    base_url = _sarlaft_portal_url()
+    candidate = (raw_target or '').strip() or base_url
+    absolute = urljoin(base_url, candidate)
+    parsed = urlsplit(absolute)
+    if parsed.scheme not in {'http', 'https'}:
+        return base_url
+    if (parsed.netloc or '').lower() != _sarlaft_allowed_host():
+        return base_url
+    return absolute
+
+
+def _sarlaft_local_proxy_url(target_url: str) -> str:
+    normalized = _normalize_sarlaft_target(target_url)
+    parsed = urlsplit(normalized)
+    proxy_path = parsed.path.lstrip('/') or urlsplit(_sarlaft_portal_url()).path.lstrip('/') or 'gci/index2.php'
+    local_url = url_for('cases.sarlaft_portal_proxy_path', proxy_path=proxy_path)
+    if parsed.query:
+        local_url = f"{local_url}?{parsed.query}"
+    return local_url
+
+
+def _sarlaft_target_from_path(proxy_path: str | None) -> str:
+    parsed_base = urlsplit(_sarlaft_portal_url())
+    path = '/' + ((proxy_path or '').strip('/') or parsed_base.path.lstrip('/') or 'gci/index2.php')
+    query = request.query_string.decode('utf-8', errors='ignore').strip()
+    absolute = f"{parsed_base.scheme}://{parsed_base.netloc}{path}"
+    if query:
+        absolute = f"{absolute}?{query}"
+    return _normalize_sarlaft_target(absolute)
+
+
+def _request_sarlaft_upstream(target_url: str, method: str | None = None, body: bytes | None = None, content_type: str | None = None):
+    request_headers = {
+        'User-Agent': request.headers.get('User-Agent', 'Mozilla/5.0'),
+        'Accept': request.headers.get('Accept', '*/*'),
+        'Accept-Language': request.headers.get('Accept-Language', 'es-CO,es;q=0.9,en;q=0.8'),
+    }
+    if content_type:
+        request_headers['Content-Type'] = content_type
+    elif request.headers.get('Content-Type'):
+        request_headers['Content-Type'] = request.headers['Content-Type']
+
+    upstream = UrlRequest(target_url, data=body, headers=request_headers, method=(method or request.method or 'GET'))
+    with urlopen(upstream, timeout=20) as remote:
+        payload = remote.read()
+        upstream_type = remote.headers.get('Content-Type', 'text/html; charset=utf-8')
+        status_code = getattr(remote, 'status', 200) or 200
+    charset = 'utf-8'
+    match = re.search(r'charset=([\w-]+)', upstream_type, re.IGNORECASE)
+    if match:
+        charset = match.group(1).strip()
+    return payload, upstream_type, status_code, charset
+
+
+def _fetch_sarlaft_initial_document(target_url: str) -> str:
+    try:
+        payload, upstream_type, status_code, charset = _request_sarlaft_upstream(target_url, method='GET', body=None, content_type=None)
+        if status_code >= 400:
+            return _sarlaft_proxy_error_html(f'El portal respondió con estado {status_code}. Intenta actualizar nuevamente.')
+        if 'text/html' not in upstream_type.lower():
+            return _sarlaft_proxy_error_html('El portal respondió con un contenido no compatible para el visor integrado.')
+        markup = payload.decode(charset, errors='replace')
+        return _rewrite_sarlaft_markup(markup, target_url)
+    except HTTPError as exc:
+        return _sarlaft_proxy_error_html(f'El portal respondió con estado {exc.code}. Intenta actualizar nuevamente.')
+    except URLError:
+        return _sarlaft_proxy_error_html('No se logró establecer conexión con el portal externo desde el servidor.')
+    except Exception:
+        return _sarlaft_proxy_error_html('Ocurrió un inconveniente inesperado al cargar el portal.')
+
+
+def _serve_sarlaft_proxy(target_url: str):
+    body = request.get_data() if request.method == 'POST' else None
+    try:
+        payload, upstream_type, status_code, charset = _request_sarlaft_upstream(target_url, body=body)
+
+        if 'text/html' in upstream_type.lower():
+            markup = payload.decode(charset, errors='replace')
+            markup = _rewrite_sarlaft_markup(markup, target_url)
+            return Response(markup, status=status_code, content_type='text/html; charset=utf-8', headers={'Cache-Control': 'no-store'})
+
+        if 'text/css' in upstream_type.lower():
+            css_text = payload.decode(charset, errors='replace')
+            css_text = _rewrite_sarlaft_css(css_text, target_url)
+            return Response(css_text, status=status_code, content_type='text/css; charset=utf-8', headers={'Cache-Control': 'no-store'})
+
+        response = Response(payload, status=status_code)
+        response.headers['Content-Type'] = upstream_type
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+    except HTTPError as exc:
+        message = f'El portal respondió con estado {exc.code}. Intenta actualizar nuevamente.'
+        return Response(_sarlaft_proxy_error_html(message), status=exc.code, content_type='text/html; charset=utf-8')
+    except URLError:
+        return Response(_sarlaft_proxy_error_html('No se logró establecer conexión con el portal externo desde el servidor.'), status=502, content_type='text/html; charset=utf-8')
+    except Exception:
+        return Response(_sarlaft_proxy_error_html('Ocurrió un inconveniente inesperado al cargar el portal.'), status=500, content_type='text/html; charset=utf-8')
+
+
+def _rewrite_sarlaft_markup(markup: str, current_target: str) -> str:
+    markup = re.sub(r"<meta[^>]+http-equiv=[\"']refresh[\"'][^>]*>", '', markup, flags=re.IGNORECASE)
+    markup = re.sub(r"<meta[^>]+http-equiv=[\"']content-security-policy[\"'][^>]*>", '', markup, flags=re.IGNORECASE)
+    markup = markup.replace('window.top.location', 'window.location')
+    markup = markup.replace('top.location', 'window.location')
+    markup = markup.replace('parent.location', 'window.location')
+    markup = markup.replace('top.document.location', 'window.location')
+    markup = markup.replace('parent.document.location', 'window.location')
+
+    def replace_attr(match):
+        attr = match.group(1)
+        quote = match.group(2)
+        value = match.group(3)
+        stripped = (value or '').strip()
+        if not stripped or stripped.startswith('#') or stripped.startswith('javascript:') or stripped.startswith('data:'):
+            return match.group(0)
+        proxied = _sarlaft_local_proxy_url(_normalize_sarlaft_target(urljoin(current_target, stripped)))
+        return f'{attr}={quote}{proxied}{quote}'
+
+    markup = re.sub(r"""\b(href|src|action)=(["'])(.*?)(\2)""", replace_attr, markup, flags=re.IGNORECASE)
+    markup = re.sub(r"""\btarget=(["']).*?(\1)""", 'target="_self"', markup, flags=re.IGNORECASE)
+
+    proxy_root = url_for('cases.sarlaft_portal_proxy')
+    proxy_origin = _sarlaft_local_proxy_url(current_target).rsplit('/', 1)[0]
+    injected = f"""
+    <base href="{_sarlaft_local_proxy_url(current_target)}" target="_self">
+    <style>
+      html, body {{ height: 100%; }}
+      body {{ margin: 0; background: #ffffff !important; }}
+      img, iframe, table, div {{ max-width: 100%; }}
+      ::-webkit-scrollbar {{ width: 10px; height: 10px; }}
+      ::-webkit-scrollbar-thumb {{ background: rgba(0,152,177,.30); border-radius: 999px; }}
+    </style>
+    <script>
+      (function () {{
+        var proxyRoot = {proxy_root!r};
+        var proxyOrigin = {proxy_origin!r};
+        function toProxy(url) {{
+          if (!url) return url;
+          if (url.indexOf('javascript:') === 0 || url.indexOf('data:') === 0 || url.indexOf('#') === 0) return url;
+          if (url.indexOf(proxyRoot) === 0) return url;
+          if (url.indexOf('http://') === 0 || url.indexOf('https://') === 0) {{
+            return proxyRoot + '?target=' + encodeURIComponent(url);
+          }}
+          if (url.indexOf('/') === 0) {{
+            var normalized = url;
+            while (normalized.indexOf('/') === 0) normalized = normalized.slice(1);
+            if (normalized.indexOf('gci/') !== 0) {{ normalized = 'gci/' + normalized; }}
+            return proxyOrigin + '/' + normalized;
+          }}
+          return url;
+        }}
+        function safeNavigate(next) {{
+          if (!next) return;
+          window.location.assign(toProxy(next));
+        }}
+        function hardenDocument(root) {{
+          try {{
+            (root || document).querySelectorAll('a[target]').forEach(function (link) {{ link.setAttribute('target', '_self'); }});
+            (root || document).querySelectorAll('form[target]').forEach(function (form) {{ form.setAttribute('target', '_self'); }});
+            (root || document).querySelectorAll('a[href]').forEach(function (link) {{
+              var href = link.getAttribute('href') || '';
+              var next = toProxy(href);
+              if (next && next !== href) link.setAttribute('href', next);
+            }});
+            (root || document).querySelectorAll('form[action]').forEach(function (form) {{
+              var action = form.getAttribute('action') || '';
+              var next = toProxy(action);
+              if (next && next !== action) form.setAttribute('action', next);
+            }});
+          }} catch (e) {{}}
+        }}
+        try {{ window.open = function (url) {{ safeNavigate(url || ''); return null; }}; }} catch (e) {{}}
+        try {{
+          var replace = window.location.replace.bind(window.location);
+          window.location.replace = function (url) {{ safeNavigate(url || ''); }};
+          window.location.assign = function (url) {{ replace(toProxy(url || '')); }};
+        }} catch (e) {{}}
+        document.addEventListener('click', function (event) {{
+          var link = event.target && event.target.closest ? event.target.closest('a[href]') : null;
+          if (!link) return;
+          link.setAttribute('target', '_self');
+          var href = link.getAttribute('href') || '';
+          var next = toProxy(href);
+          if (!next || next === href) return;
+          event.preventDefault();
+          safeNavigate(next);
+        }}, true);
+        document.addEventListener('submit', function (event) {{
+          var form = event.target;
+          if (!form || !form.getAttribute) return;
+          form.setAttribute('target', '_self');
+          var action = form.getAttribute('action') || '';
+          var next = toProxy(action);
+          if (next && next !== action) form.setAttribute('action', next);
+        }}, true);
+        var observer = new MutationObserver(function (mutations) {{
+          mutations.forEach(function (mutation) {{
+            mutation.addedNodes.forEach(function (node) {{
+              if (node && node.querySelectorAll) hardenDocument(node);
+            }});
+          }});
+        }});
+        window.addEventListener('load', function () {{
+          hardenDocument(document);
+          observer.observe(document.documentElement || document.body, {{ childList: true, subtree: true }});
+        }});
+      }})();
+    </script>
+    """
+    if '</head>' in markup.lower():
+        markup = re.sub(r'</head>', injected + '</head>', markup, count=1, flags=re.IGNORECASE)
+    else:
+        markup = injected + markup
+    return markup
+
+
+def _sarlaft_proxy_error_html(message: str) -> str:
+    safe_message = message or 'No fue posible cargar el portal SARLAFT.'
+    return f"""<!doctype html>
+<html lang=\"es\">
+<head>
+  <meta charset=\"utf-8\">
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+  <title>Visor SARLAFT</title>
+  <style>
+    body {{
+      margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px;
+      font-family: Inter, system-ui, sans-serif; color: #1e2230;
+      background: linear-gradient(180deg, #f6f9fb 0%, #edf3f5 100%);
+    }}
+    .card {{
+      width: min(760px, 100%); background: rgba(255,255,255,.98); border-radius: 24px;
+      border: 1px solid rgba(30,34,48,.08); box-shadow: 0 22px 48px rgba(31,41,55,.10); padding: 28px;
+    }}
+    .eyebrow {{ color: #0098B1; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; font-size: .78rem; }}
+    h1 {{ margin: 10px 0 8px; color: #A73493; font-size: 1.5rem; }}
+    p {{ margin: 0; color: #667085; line-height: 1.55; }}
+  </style>
+</head>
+<body>
+  <div class=\"card\">
+    <div class=\"eyebrow\">Visor SARLAFT</div>
+    <h1>No fue posible cargar el portal</h1>
+    <p>{safe_message}</p>
+  </div>
+</body>
+</html>"""
+
+
+def _rewrite_sarlaft_css(css_text: str, current_target: str) -> str:
+    def replace_url(match):
+        raw = (match.group(1) or '').strip().strip("\"'")
+        if not raw or raw.startswith('data:') or raw.startswith('#') or raw.startswith('javascript:'):
+            return match.group(0)
+        proxied = _sarlaft_local_proxy_url(_normalize_sarlaft_target(urljoin(current_target, raw)))
+        return f"url('{proxied}')"
+
+    return re.sub(r"url\((.*?)\)", replace_url, css_text, flags=re.IGNORECASE)
+
+
+def _default_sarlaft_dates() -> tuple[str, str]:
+    today = datetime.now().date()
+    return today.isoformat(), today.isoformat()
+
+
+def _sanitize_sarlaft_description(value: str) -> str:
+    compact = ' '.join(text_value(value).split())
+    return compact[:250]
+
+
+def _parse_sarlaft_date(value: str, fallback: str) -> str:
+    candidate = (value or fallback or '').strip()
+    try:
+        return datetime.strptime(candidate, '%Y-%m-%d').date().isoformat()
+    except Exception:
+        return fallback
+
+
+def _session_snapshot() -> dict:
+    return {
+        'username': current_user.username,
+        'display_name': getattr(current_user, 'display_name', '') or current_user.username,
+        'email': getattr(current_user, 'email', '') or '-',
+        'roles': _role_scope_labels(),
+        'server_now': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+    }
+
+
+def _query_sarlaft_rows(date_from: str, date_to: str) -> list[dict]:
+    sql = """
+        SELECT
+            id, user_id, user_name, user_email, office_name, description, topic, created_at
+        FROM dbo.sarlaft_queries
+        WHERE CAST(created_at AS DATE) >= ? AND CAST(created_at AS DATE) <= ?
+    """
+    params: list = [date_from, date_to]
+    if not _is_admin():
+        sql += " AND LOWER(user_id) = LOWER(?)"
+        params.append(current_user.username)
+    sql += " ORDER BY created_at DESC"
+    rows = select_all(sql, tuple(params))
+    for row in rows:
+        row['created_at_text'] = _fmt_dt(row.get('created_at'))
+        row['topic_label'] = next((item['label'] for item in SARLAFT_TOPICS if item['key'] == row.get('topic')), row.get('topic') or '-')
+    return rows
+
+
+def _sarlaft_summary(rows: list[dict]) -> dict:
+    return {
+        'total': len(rows),
+        'offices': len({(row.get('office_name') or '').strip() for row in rows if row.get('office_name')}),
+        'topics': len({(row.get('topic') or '').strip() for row in rows if row.get('topic')}),
+    }
+
+
+def _redirect_sarlaft_denied():
+    flash('Solo los perfiles Administrador y SARLAFT pueden acceder a este módulo.', 'error')
+    return redirect(url_for('cases.dashboard'))
 
 
 def _dedupe(items):
@@ -789,7 +1194,7 @@ def _handle_status_change(case_id: str, case_row: dict, action: str, note: str, 
             "CASE",
             "ERROR",
             "CASE_STATUS_CHANGE_FAILED",
-            detail="UNEXPECTED_ERROR",
+            detail=type(exc).__name__,
             source="cases._handle_status_change",
             user_id=current_user.username,
             case_id=case_id,
@@ -1039,6 +1444,161 @@ def ingest_emails_action():
             return jsonify(ok=False, error=public_error_message()), 500
 
     return redirect(request.referrer or url_for("cases.dashboard"))
+
+
+@cases_bp.route('/sarlaft')
+@login_required
+def sarlaft_portal():
+    if not _can_access_sarlaft_module():
+        return _redirect_sarlaft_denied()
+
+    date_from, date_to = _default_sarlaft_dates()
+    current_target = _normalize_sarlaft_target(request.args.get('target'))
+    popup_only = _sarlaft_requires_external_window(current_target)
+    return render_template(
+        'sarlaft/index.html',
+        title='Consulta SARLAFT',
+        notif_count=_notif_count(),
+        sarlaft_url=_sarlaft_portal_url(),
+        sarlaft_proxy_url='' if popup_only else _sarlaft_local_proxy_url(current_target),
+        sarlaft_initial_doc='' if popup_only else _fetch_sarlaft_initial_document(current_target),
+        sarlaft_window_url=_force_https_url(current_target) or _sarlaft_portal_url(),
+        sarlaft_popup_only=popup_only,
+        current_target=current_target,
+        offices=SARLAFT_OFFICES,
+        topics=SARLAFT_TOPICS,
+        session_info=_session_snapshot(),
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+
+@cases_bp.route('/sarlaft/portal', methods=['GET', 'POST'])
+@login_required
+def sarlaft_portal_proxy():
+    if not _can_access_sarlaft_module():
+        return Response(_sarlaft_proxy_error_html('No autorizado para consultar este portal.'), status=403, content_type='text/html; charset=utf-8')
+
+    target_url = _normalize_sarlaft_target(request.args.get('target'))
+    return _serve_sarlaft_proxy(target_url)
+
+
+@cases_bp.route('/sarlaft/portal/<path:proxy_path>', methods=['GET', 'POST'], endpoint='sarlaft_portal_proxy_path')
+@login_required
+def sarlaft_portal_proxy_path(proxy_path: str):
+    if not _can_access_sarlaft_module():
+        return Response(_sarlaft_proxy_error_html('No autorizado para consultar este portal.'), status=403, content_type='text/html; charset=utf-8')
+
+    reserved = {'guardar', 'reporte', 'proxy'}
+    if proxy_path.split('/', 1)[0].lower() in reserved:
+        abort(404)
+
+    return _serve_sarlaft_proxy(_sarlaft_target_from_path(proxy_path))
+
+
+@cases_bp.route('/sarlaft/proxy', methods=['GET', 'POST'])
+@login_required
+def sarlaft_proxy_compat():
+    if not _can_access_sarlaft_module():
+        return Response(_sarlaft_proxy_error_html('No autorizado para consultar este portal.'), status=403, content_type='text/html; charset=utf-8')
+
+    target_url = _normalize_sarlaft_target(request.args.get('target'))
+    return _serve_sarlaft_proxy(target_url)
+
+
+@cases_bp.route('/sarlaft/<path:proxy_path>', methods=['GET', 'POST'])
+@login_required
+def sarlaft_proxy_path_compat(proxy_path: str):
+    reserved = {'guardar', 'reporte', 'portal', 'proxy'}
+    if proxy_path.split('/', 1)[0].lower() in reserved:
+        abort(404)
+    return sarlaft_portal_proxy_path(proxy_path)
+
+
+@cases_bp.route('/sarlaft/guardar', methods=['POST'])
+@login_required
+def sarlaft_save():
+    if not _can_access_sarlaft_module():
+        return jsonify(ok=False, error='No autorizado.'), 403
+
+    payload = request.get_json(silent=True) if request.is_json else None
+    office = text_value((payload or {}).get('office') if payload else request.form.get('office'))
+    topic = normalize_role(text_value((payload or {}).get('topic') if payload else request.form.get('topic')))
+    description = _sanitize_sarlaft_description(text_value((payload or {}).get('description') if payload else request.form.get('description')))
+
+    if office not in SARLAFT_OFFICES:
+        return jsonify(ok=False, error='Selecciona una oficina válida.'), 400
+    if topic not in SARLAFT_TOPIC_KEYS:
+        return jsonify(ok=False, error='Selecciona un tema válido.'), 400
+    if not description:
+        return jsonify(ok=False, error='La descripción es obligatoria.'), 400
+
+    execute(
+        """
+        INSERT INTO dbo.sarlaft_queries
+            (user_id, user_name, user_email, office_name, description, topic, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, SYSDATETIME())
+        """,
+        (
+            current_user.username,
+            getattr(current_user, 'display_name', '') or current_user.username,
+            getattr(current_user, 'email', '') or None,
+            office,
+            description,
+            topic,
+        ),
+    )
+    commit()
+
+    log_event(
+        'AUDIT',
+        'INFO',
+        'SARLAFT_QUERY_CREATED',
+        detail='registro sarlaft almacenado',
+        source='cases.sarlaft_save',
+        user_id=current_user.username,
+        status='OK',
+        metadata={'office': office, 'topic': topic},
+    )
+
+    return jsonify(
+        ok=True,
+        message='Registro guardado correctamente.',
+        entry={
+            'office': office,
+            'topic': topic,
+            'topic_label': next((item['label'] for item in SARLAFT_TOPICS if item['key'] == topic), topic),
+            'description': description,
+            'created_at_text': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'user_name': getattr(current_user, 'display_name', '') or current_user.username,
+        },
+    )
+
+
+@cases_bp.route('/sarlaft/reporte')
+@login_required
+def sarlaft_report():
+    if not _can_access_sarlaft_module():
+        return _redirect_sarlaft_denied()
+
+    default_from, default_to = _default_sarlaft_dates()
+    date_from = _parse_sarlaft_date(request.args.get('date_from') or default_from, default_from)
+    date_to = _parse_sarlaft_date(request.args.get('date_to') or default_to, default_to)
+    if date_to < date_from:
+        date_from, date_to = date_to, date_from
+        flash('Se ajustó el rango de fechas para mantener un orden válido.', 'warning')
+
+    rows = _query_sarlaft_rows(date_from, date_to)
+    return render_template(
+        'sarlaft/report.html',
+        title='Reporte SARLAFT',
+        notif_count=_notif_count(),
+        rows=rows,
+        summary=_sarlaft_summary(rows),
+        date_from=date_from,
+        date_to=date_to,
+        is_admin_view=_is_admin(),
+    )
 
 
 @cases_bp.route("/notifications")

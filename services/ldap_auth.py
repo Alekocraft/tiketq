@@ -484,7 +484,7 @@ def test_connection():
         conn.unbind()
         return True, "OK"
     except Exception as exc:
-        _log_directory_service_error("test_connection", detail="DIRECTORY_SERVICE_ERROR")
+        _log_directory_service_error("test_connection", detail=type(exc).__name__)
         return False, "DIRECTORY_SERVICE_UNAVAILABLE"
 
 
@@ -531,7 +531,7 @@ def search_user(username: str):
         conn.unbind()
         return True, result
     except Exception as exc:
-        _log_directory_service_error("search_user", detail="DIRECTORY_SERVICE_ERROR")
+        _log_directory_service_error("search_user", detail=type(exc).__name__)
         return False, LDAP_PUBLIC_ERROR.copy()
 
 

@@ -443,7 +443,7 @@ def ingest_unseen():
                     "EMAIL",
                     "ERROR",
                     "EMAIL_INGEST_ITEM_FAILED",
-                    detail="UNEXPECTED_ERROR",
+                    detail=type(exc).__name__,
                     source="services.email_ingest",
                     case_id=referenced_case_id or None,
                     status="FAILED",

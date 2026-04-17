@@ -1,0 +1,88 @@
+{% extends 'layout.html' %}
+
+{% block head_extra %}
+<style>
+  .sarlaft-report-shell { display:grid; gap:22px; }
+  .sarlaft-report-hero, .sarlaft-report-panel, .sarlaft-report-table { background:rgba(255,255,255,.96); border:1px solid rgba(30,34,48,.08); border-radius:24px; box-shadow:var(--shadow-soft); }
+  .sarlaft-report-hero, .sarlaft-report-panel { padding:24px 28px; }
+  .sarlaft-report-hero h1, .sarlaft-report-panel h2 { margin:0 0 8px; color:var(--ink); }
+  .sarlaft-report-hero p, .sarlaft-report-panel p { margin:0; color:var(--muted); }
+  .sarlaft-report-form { display:grid; gap:16px; margin-top:18px; }
+  .sarlaft-report-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px; }
+  .sarlaft-kpis { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:14px; }
+  .sarlaft-kpi { padding:16px 18px; border-radius:20px; background:linear-gradient(180deg, rgba(0,152,177,.08), rgba(167,52,147,.05)); border:1px solid rgba(0,152,177,.12); }
+  .sarlaft-kpi span { display:block; font-size:.84rem; color:var(--muted); margin-bottom:6px; }
+  .sarlaft-kpi strong { font-size:1.2rem; color:var(--ink); }
+  .sarlaft-report-table { overflow:auto; }
+  .sarlaft-report-table table { width:100%; border-collapse:collapse; min-width:860px; }
+  .sarlaft-report-table th, .sarlaft-report-table td { padding:12px 14px; text-align:left; border-bottom:1px solid rgba(30,34,48,.08); vertical-align:top; }
+  .sarlaft-report-table th { background:#1f2332; color:#fff; }
+  .sarlaft-report-empty { padding:26px 28px; color:var(--muted); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sarlaft-report-shell">
+  <section class="sarlaft-report-hero">
+    <div class="hero-panel__eyebrow">Trazabilidad SARLAFT</div>
+    <h1>Reporte de consultas</h1>
+    <p>El reporte solicita únicamente fechas. Cada usuario visualiza sus propios registros y el administrador puede revisar la totalidad de las consultas almacenadas.</p>
+  </section>
+
+  <section class="sarlaft-report-panel">
+    <h2>Filtro por fechas</h2>
+    <p>{% if is_admin_view %}Vista completa del sistema.{% else %}Vista limitada al usuario autenticado.{% endif %}</p>
+    <form class="sarlaft-report-form" method="get" action="{{ url_for('cases.sarlaft_report') }}">
+      <div class="sarlaft-report-grid">
+        <div class="field">
+          <label for="date_from">Fecha inicial</label>
+          <input id="date_from" type="date" name="date_from" value="{{ date_from }}" required>
+        </div>
+        <div class="field">
+          <label for="date_to">Fecha final</label>
+          <input id="date_to" type="date" name="date_to" value="{{ date_to }}" required>
+        </div>
+      </div>
+      <div class="sarlaft-actions">
+        <button type="submit" class="btn btn-primary">Consultar</button>
+        <a class="btn btn-ghost" href="{{ url_for('cases.sarlaft_portal') }}">Volver al módulo</a>
+      </div>
+    </form>
+  </section>
+
+  <section class="sarlaft-kpis">
+    <article class="sarlaft-kpi"><span>Total registros</span><strong>{{ summary.total }}</strong></article>
+    <article class="sarlaft-kpi"><span>Oficinas consultadas</span><strong>{{ summary.offices }}</strong></article>
+    <article class="sarlaft-kpi"><span>Temas presentes</span><strong>{{ summary.topics }}</strong></article>
+  </section>
+
+  <section class="sarlaft-report-table">
+    {% if rows %}
+    <table>
+      <thead>
+        <tr>
+          <th>Fecha y hora</th>
+          {% if is_admin_view %}<th>Usuario</th>{% endif %}
+          <th>Oficina</th>
+          <th>Tema</th>
+          <th>Descripción</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.created_at_text }}</td>
+          {% if is_admin_view %}<td>{{ row.user_name or row.user_id }}<br><span class="muted">{{ row.user_id }}</span></td>{% endif %}
+          <td>{{ row.office_name }}</td>
+          <td>{{ row.topic_label }}</td>
+          <td>{{ row.description }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="sarlaft-report-empty">No hay registros para el rango seleccionado.</div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

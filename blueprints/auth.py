@@ -4,7 +4,7 @@ from flask_login import current_user, login_user, logout_user
 from models.user import User
 from services.db import commit, execute, select_all, select_one
 from services.ldap_auth import authenticate, test_connection
-from services.roles import has_effective_role, normalize_role, normalize_roles
+from services.roles import can_access_sarlaft, has_effective_role, normalize_role, normalize_roles
 
 
 auth_bp = Blueprint("auth", __name__, url_prefix="")
@@ -24,6 +24,13 @@ def _replace_roles(user_id: str, roles) -> list[str]:
             (user_id, role),
         )
     return normalized
+
+
+def _post_login_target(user: User) -> str:
+    roles = getattr(user, 'roles', []) or ([getattr(user, 'role', '')] if getattr(user, 'role', '') else [])
+    if can_access_sarlaft(roles):
+        return url_for('cases.sarlaft_portal')
+    return url_for('cases.dashboard')
 
 
 def _upsert_user(user: User):
@@ -72,7 +79,7 @@ def _upsert_user(user: User):
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for("cases.dashboard"))
+        return redirect(_post_login_target(current_user))
 
     if request.method == "POST":
         usuario = (request.form.get("usuario") or "").strip()
@@ -123,7 +130,7 @@ def login():
             session["user_job_title"] = (info.get("job_title") or "").strip()
             session["user_department"] = (info.get("department") or "").strip()
             next_url = request.args.get("next")
-            return redirect(next_url or url_for("cases.dashboard"))
+            return redirect(next_url or _post_login_target(user))
 
         flash("Credenciales inválidas o usuario no encontrado en directorio.", "error")
         return render_template("auth/login.html")

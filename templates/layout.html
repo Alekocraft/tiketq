@@ -14,7 +14,8 @@
 
     <div class="app-header__shell">
       <div class="app-toolbar">
-        <a class="brand" href="/dashboard">
+        {% set home_url = url_for('cases.sarlaft_portal') if current_user.is_authenticated and current_user.has_any_role('administrador', 'sarlaft') else url_for('cases.dashboard') %}
+        <a class="brand" href="{{ home_url }}">
           <span class="brand__mark" aria-hidden="true">
             <img src="{{ url_for('static', filename='Qualitas_Logo.svg') }}" alt="SolucionaTI" class="brand__logo">
           </span>
@@ -90,6 +91,14 @@
               <span class="sidebar-link__badge" data-notif-count-badge>{{ notif_count }}</span>
             {% endif %}
           </a>
+
+
+          {% if current_user.is_authenticated and current_user.has_any_role('administrador', 'sarlaft') %}
+          <a class="sidebar-link {% if request.path.startswith('/sarlaft') %}active{% endif %}" href="{{ url_for('cases.sarlaft_portal') }}">
+            <span class="sidebar-link__label">Consulta SARLAFT</span>
+            <span class="sidebar-link__meta">Portal y trazabilidad</span>
+          </a>
+          {% endif %}
 
           {% if current_user.is_authenticated and current_user.has_role('administrador') %}
           <a class="sidebar-link {% if request.path.startswith('/admin/users') %}active{% endif %}" href="{{ url_for('users.list_users') }}">

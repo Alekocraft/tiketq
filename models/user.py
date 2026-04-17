@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from flask_login import UserMixin
 
-from services.roles import can_access_general_cases, can_ingest, can_triage, has_effective_role, normalize_role, normalize_roles, role_label
+from services.roles import can_access_general_cases, can_access_sarlaft, can_ingest, can_triage, has_effective_role, normalize_role, normalize_roles, role_label
 
 
 class User(UserMixin):
@@ -65,3 +65,6 @@ class User(UserMixin):
 
     def can_access_general_cases(self) -> bool:
         return can_access_general_cases(self.roles)
+
+    def can_access_sarlaft(self) -> bool:
+        return can_access_sarlaft(self.roles)

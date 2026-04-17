@@ -8,6 +8,7 @@ ROLE_DEFINITIONS = [
     {"key": "ciberseguridad", "label": "Ciberseguridad", "queue": True},
     {"key": "sugip", "label": "SUGIP", "queue": True},
     {"key": "analista_ti", "label": "Analista TI", "queue": True},
+    {"key": "sarlaft", "label": "SARLAFT", "queue": False},
 ]
 
 SIN_ROL_KEY = "sin_rol"
@@ -17,6 +18,7 @@ OPERATIONAL_ROLE_SET = set(OPERATIONAL_ROLES)
 ADMIN_ROLES = {"administrador"}
 RESOLVER_ROLES = set(OPERATIONAL_ROLES) | ADMIN_ROLES
 INGEST_ROLES = {"administrador", "gestor_ti"}
+SARLAFT_ACCESS_ROLES = {"administrador", "sarlaft"}
 GENERAL_CASES_ROLES = {"administrador", "gestor_ti", "sugip"}
 BLOCK_GENERAL_CASES_ROLES = {"analista_ti", "ciberseguridad"}
 TRIAGE_TARGETS = {
@@ -46,6 +48,7 @@ ROLE_ALIASES = {
     "sin rol": "sin_rol",
     "sin_rol": "sin_rol",
     "sin-rol": "sin_rol",
+    "sarlaft": "sarlaft",
 }
 
 
@@ -100,6 +103,10 @@ def can_resolve(roles: Iterable[str] | None) -> bool:
 
 def can_ingest(roles: Iterable[str] | None) -> bool:
     return bool(set(effective_roles(roles)) & INGEST_ROLES)
+
+
+def can_access_sarlaft(roles: Iterable[str] | None) -> bool:
+    return bool(set(effective_roles(roles)) & SARLAFT_ACCESS_ROLES)
 
 
 def can_access_general_cases(roles: Iterable[str] | None) -> bool:

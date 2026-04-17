@@ -2,10 +2,7 @@ from __future__ import annotations
 
 import os
 import secrets
-import socket
 from typing import Any
-
-from flask import current_app, has_app_context, has_request_context, request
 
 from services.db import commit, execute, rollback, select_all, select_one
 from services.mail import send_mail
@@ -18,37 +15,18 @@ AUTO_CLOSE_NOTE = (
 
 
 def _public_base_url() -> str:
-    base = text_value(
-        os.getenv("PUBLIC_BASE_URL")
-        or os.getenv("APP_BASE_URL")
-        or os.getenv("APP_PUBLIC_URL")
-    ).rstrip("/")
+    base = text_value(os.getenv("PUBLIC_BASE_URL") or os.getenv("APP_BASE_URL")).rstrip("/")
     if base:
         return base
 
-    preferred_scheme = text_value(os.getenv("PUBLIC_SCHEME") or os.getenv("PREFERRED_URL_SCHEME"), "http") or "http"
-    port = text_value(os.getenv("PORT"), "5020") or "5020"
-
-    host = text_value(os.getenv("PUBLIC_HOST") or os.getenv("APP_HOST") or os.getenv("SERVER_NAME")).rstrip("/")
+    host = text_value(os.getenv("PUBLIC_HOST")).rstrip("/")
     if host:
         if host.startswith("http://") or host.startswith("https://"):
             return host
-        return f"{preferred_scheme}://{host}"
+        return f"https://{host}"
 
-    if has_request_context():
-        return request.host_url.rstrip("/")
-
-    if has_app_context():
-        server_name = text_value(current_app.config.get("SERVER_NAME")).rstrip("/")
-        if server_name:
-            scheme = text_value(current_app.config.get("PREFERRED_URL_SCHEME"), preferred_scheme) or preferred_scheme
-            return f"{scheme}://{server_name}"
-
-    hostname = text_value(socket.gethostname()).strip().rstrip("/")
-    if hostname and hostname.lower() not in {"localhost", "127.0.0.1"}:
-        return f"{preferred_scheme}://{hostname}:{port}"
-
-    return f"{preferred_scheme}://localhost:{port}"
+    port = text_value(os.getenv("PORT"), "5020") or "5020"
+    return f"http://localhost:{port}"
 
 
 def survey_link(token: str) -> str:

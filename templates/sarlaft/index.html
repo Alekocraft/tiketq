@@ -1,0 +1,442 @@
+{% extends 'layout.html' %}
+
+{% block head_extra %}
+<style>
+  .app-shell { max-width: min(1720px, calc(100vw - 40px)); grid-template-columns: 240px minmax(0, 1fr); }
+  .container--content { max-width: none; }
+  .app-content { min-width: 0; }
+
+  .sarlaft-shell { display:grid; gap:18px; }
+  .sarlaft-hero, .sarlaft-panel, .sarlaft-frame, .sarlaft-session, .sarlaft-mini-card { background:rgba(255,255,255,.97); border:1px solid rgba(30,34,48,.08); border-radius:24px; box-shadow:var(--shadow-soft); }
+  .sarlaft-hero { padding:22px 26px; display:flex; justify-content:space-between; gap:18px; align-items:flex-start; }
+  .sarlaft-hero h1 { margin:0 0 8px; color:var(--ink); }
+  .sarlaft-hero p { margin:0; color:var(--muted); max-width:900px; }
+  .sarlaft-actions { display:flex; gap:12px; flex-wrap:wrap; }
+  .sarlaft-layout { display:grid; grid-template-columns:minmax(340px, 390px) minmax(0, 1fr); gap:18px; align-items:start; }
+  .sarlaft-stack { display:grid; gap:18px; position:sticky; top:118px; }
+  .sarlaft-panel { padding:22px; }
+  .sarlaft-panel h2, .sarlaft-session h2, .sarlaft-frame h2 { margin:0 0 8px; color:var(--ink); font-size:1.08rem; }
+  .sarlaft-panel p, .sarlaft-session p, .sarlaft-frame p { margin:0; color:var(--muted); }
+  .sarlaft-form { display:grid; gap:14px; margin-top:16px; }
+  .sarlaft-form textarea { min-height:96px; max-height:128px; }
+  .sarlaft-status { min-height:22px; font-size:.92rem; color:var(--blue-strong); }
+  .sarlaft-status.is-error { color:var(--purple-strong); }
+  .sarlaft-session { padding:22px; display:grid; gap:14px; }
+  .sarlaft-session__grid { display:grid; gap:12px; }
+  .sarlaft-mini-card { padding:14px 16px; }
+  .sarlaft-mini-card span { display:block; font-size:.8rem; color:var(--muted); margin-bottom:4px; }
+  .sarlaft-mini-card strong { color:var(--ink); word-break:break-word; }
+
+  .sarlaft-frame { padding:16px; display:grid; gap:14px; min-height:calc(100vh - 145px); }
+  .sarlaft-frame__header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+  .sarlaft-frame__box { position:relative; border-radius:20px; overflow:hidden; border:1px solid rgba(0,152,177,.18); background:linear-gradient(180deg, rgba(0,152,177,.06), rgba(167,52,147,.04)); min-height:calc(100vh - 230px); box-shadow: inset 0 0 0 1px rgba(255,255,255,.45); }
+  .sarlaft-frame__bar { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px; background:linear-gradient(135deg, rgba(167,52,147,.08) 0%, rgba(0,152,177,.08) 100%); border-bottom:1px solid rgba(30,34,48,.08); }
+  .sarlaft-frame__bar span { color:var(--muted); font-size:.86rem; }
+  .sarlaft-frame__bar strong { color:var(--ink); word-break:break-all; }
+  .sarlaft-frame iframe { width:100%; height:calc(100vh - 286px); min-height:860px; border:none; background:#fff; display:block; }
+  .sarlaft-frame__loading { position:absolute; inset:53px 0 0; display:grid; place-items:center; padding:32px; background:linear-gradient(180deg, rgba(255,255,255,.94), rgba(246,249,251,.97)); z-index:2; }
+  .sarlaft-frame__loading.is-hidden { display:none; }
+  .sarlaft-loading-card, .sarlaft-auth-card { width:min(620px, 100%); background:#fff; border:1px solid rgba(30,34,48,.08); border-radius:20px; box-shadow:var(--shadow-soft); padding:22px; display:grid; gap:12px; }
+  .sarlaft-loading-card strong, .sarlaft-auth-card strong { color:var(--purple); font-size:1rem; }
+  .sarlaft-loading-card p, .sarlaft-auth-card p { margin:0; color:var(--muted); }
+  .sarlaft-spinner { width:38px; height:38px; border-radius:999px; border:4px solid rgba(0,152,177,.18); border-top-color:#0098B1; animation:sarlaftSpin .9s linear infinite; }
+  @keyframes sarlaftSpin { to { transform: rotate(360deg); } }
+  .sarlaft-frame__fallback { display:none; margin:12px 14px 14px; padding:14px 16px; border-radius:16px; border:1px solid rgba(167,52,147,.18); background:rgba(167,52,147,.06); color:var(--ink); }
+  .sarlaft-frame__fallback.is-visible { display:block; }
+  .sarlaft-auth-panel { padding:26px; min-height:calc(100vh - 286px); display:grid; align-items:center; }
+  .sarlaft-auth-card ol { margin:0; padding-left:20px; color:var(--ink); display:grid; gap:8px; }
+  .sarlaft-auth-card code { background:rgba(217,217,217,.35); padding:2px 6px; border-radius:8px; }
+  .sarlaft-auth-badge { display:inline-flex; align-items:center; width:max-content; padding:7px 12px; border-radius:999px; background:rgba(167,52,147,.10); color:#A73493; font-weight:800; font-size:.8rem; letter-spacing:.02em; }
+  .sarlaft-auth-actions { display:flex; gap:12px; flex-wrap:wrap; margin-top:4px; }
+  .sarlaft-auth-note { padding:12px 14px; border-radius:14px; background:rgba(0,152,177,.08); border:1px solid rgba(0,152,177,.14); }
+  .sarlaft-legend { display:flex; flex-wrap:wrap; gap:10px; }
+  .sarlaft-pill { display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:999px; background:rgba(217,217,217,.34); color:var(--ink); font-weight:700; }
+  .sarlaft-pill strong { color:var(--purple); }
+  .sarlaft-recent { display:none; margin-top:12px; }
+  .sarlaft-recent.is-visible { display:block; }
+  .sarlaft-recent__body { margin-top:10px; padding:14px 16px; border-radius:18px; background:rgba(0,152,177,.08); border:1px solid rgba(0,152,177,.12); display:grid; gap:6px; }
+
+  @media (max-width: 1280px) {
+    .app-shell { max-width: calc(100vw - 28px); grid-template-columns: 228px minmax(0, 1fr); }
+    .sarlaft-layout { grid-template-columns:minmax(320px, 360px) minmax(0, 1fr); }
+  }
+  @media (max-width: 1120px) {
+    .sarlaft-layout { grid-template-columns:1fr; }
+    .sarlaft-stack { position:static; }
+    .sarlaft-frame { min-height:auto; }
+    .sarlaft-frame__box { min-height:68vh; }
+    .sarlaft-frame iframe, .sarlaft-auth-panel { min-height:68vh; height:68vh; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sarlaft-shell">
+  <section class="sarlaft-hero">
+    <div>
+      <div class="hero-panel__eyebrow">Módulo especializado</div>
+      <h1>Consulta SARLAFT</h1>
+      {% if sarlaft_popup_only %}
+      <p>El destino configurado requiere autenticación interactiva de Microsoft. Para evitar pantalla en blanco y redirecciones fuera del módulo, la autenticación se abre en una ventana segura independiente y la página principal <strong>permanece en /sarlaft</strong>.</p>
+      {% else %}
+      <p>El portal externo se carga dentro de esta misma vista sin redirigir a otra página. El formulario permanece visible a la izquierda y conserva su información mientras navegas en el visor.</p>
+      {% endif %}
+    </div>
+    <div class="sarlaft-actions">
+      <a class="btn btn-secondary" href="{{ url_for('cases.sarlaft_report', date_from=date_from, date_to=date_to) }}">Reporte</a>
+      <button class="btn btn-primary" type="button" id="openExternalPortalBtn">{% if sarlaft_popup_only %}Iniciar sesión en ventana segura{% else %}Abrir en ventana segura{% endif %}</button>
+      {% if not sarlaft_popup_only %}
+      <button class="btn btn-ghost" type="button" id="refreshFrameBtn">Actualizar visor</button>
+      <button class="btn btn-ghost" type="button" id="fullscreenFrameBtn">Pantalla completa</button>
+      {% endif %}
+    </div>
+  </section>
+
+  <div class="sarlaft-layout">
+    <div class="sarlaft-stack">
+      <section class="sarlaft-panel">
+        <h2>Registro de consulta</h2>
+        <p>Diligencia la oficina, el tema y una descripción breve. El guardado se realiza en segundo plano y el visor SARLAFT no se recarga.</p>
+        <form id="sarlaftForm" class="sarlaft-form" autocomplete="off">
+          <div class="field">
+            <label for="office">Oficina de servicio</label>
+            <select id="office" name="office" required>
+              <option value="">Selecciona una oficina</option>
+              {% for office in offices %}
+              <option value="{{ office }}">{{ office }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label for="topic">Tema</label>
+            <select id="topic" name="topic" required>
+              <option value="">Selecciona un tema</option>
+              {% for topic in topics %}
+              <option value="{{ topic.key }}">{{ topic.label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label for="description">Descripción</label>
+            <textarea id="description" name="description" maxlength="250" placeholder="Describe brevemente la consulta realizada" required></textarea>
+          </div>
+          <div class="sarlaft-actions">
+            <button type="submit" class="btn btn-primary" id="saveSarlaftBtn">Guardar</button>
+            <button type="button" class="btn btn-ghost" id="clearSarlaftBtn">Limpiar</button>
+          </div>
+          <div id="sarlaftStatus" class="sarlaft-status" aria-live="polite"></div>
+          <div id="sarlaftRecent" class="sarlaft-recent">
+            <div class="sarlaft-recent__body">
+              <strong>Último registro almacenado</strong>
+              <span id="sarlaftRecentText"></span>
+            </div>
+          </div>
+        </form>
+      </section>
+
+      <section class="sarlaft-session">
+        <div>
+          <h2>Sesión activa</h2>
+          <p>Información operativa del usuario autenticado y hora visible del servidor.</p>
+        </div>
+        <div class="sarlaft-session__grid">
+          <div class="sarlaft-mini-card"><span>Fecha y hora</span><strong id="sessionClock">{{ session_info.server_now }}</strong></div>
+          <div class="sarlaft-mini-card"><span>Usuario en línea</span><strong>{{ session_info.display_name }}</strong></div>
+          <div class="sarlaft-mini-card"><span>Cuenta</span><strong>{{ session_info.username }}</strong></div>
+          <div class="sarlaft-mini-card"><span>Correo</span><strong>{{ session_info.email }}</strong></div>
+          <div class="sarlaft-mini-card"><span>Roles</span><strong>{{ session_info.roles|join(', ') }}</strong></div>
+        </div>
+      </section>
+    </div>
+
+    <section class="sarlaft-frame" id="sarlaftFrameCard">
+      <div class="sarlaft-frame__header">
+        <div>
+          <h2>Visor integrado SARLAFT</h2>
+          {% if sarlaft_popup_only %}
+          <p>La autenticación interactiva se hace por <strong>ventana segura</strong> y la página principal se mantiene en <strong>/sarlaft</strong>, sin redirecciones del módulo.</p>
+          {% else %}
+          <p>La consulta de <strong>{{ sarlaft_url }}</strong> se carga dentro de <strong>/sarlaft</strong>, sin salir a otra página y usando HTTPS en el destino externo.</p>
+          {% endif %}
+        </div>
+        <div class="sarlaft-legend">
+          <span class="sarlaft-pill"><strong>Base</strong> #A73493</span>
+          <span class="sarlaft-pill"><strong>Accento</strong> #0098B1</span>
+          <span class="sarlaft-pill"><strong>Apoyo</strong> #D9D9D9</span>
+        </div>
+      </div>
+      <div class="sarlaft-frame__box">
+        <div class="sarlaft-frame__bar">
+          <span>Destino activo</span>
+          <strong>{{ sarlaft_window_url if sarlaft_popup_only else sarlaft_url }}</strong>
+        </div>
+        {% if sarlaft_popup_only %}
+        <div class="sarlaft-auth-panel">
+          <div class="sarlaft-auth-card">
+            <span class="sarlaft-auth-badge">Autenticación externa requerida</span>
+            <strong>Este destino no debe abrirse dentro del frame.</strong>
+            <p>Las páginas de inicio de sesión de Microsoft suelen bloquear la incrustación por políticas de seguridad del proveedor y del navegador. Para evitar el recuadro en blanco y cualquier redirección del módulo, el acceso se hace en una ventana independiente.</p>
+            <div class="sarlaft-auth-note">
+              <p>La autenticación se abrirá por <strong>HTTPS</strong> en una ventana segura. La sesión actual, el formulario y esta pantalla de <code>/sarlaft</code> permanecen intactos.</p>
+            </div>
+            <ol>
+              <li>Haz clic en <strong>Iniciar sesión en ventana segura</strong>.</li>
+              <li>Completa la autenticación en la ventana emergente o pestaña nueva.</li>
+              <li>Regresa a esta pantalla para continuar con el registro del formulario y el reporte.</li>
+            </ol>
+            <div class="sarlaft-auth-actions">
+              <button class="btn btn-primary" type="button" id="openExternalPortalBtnInline">Iniciar sesión en ventana segura</button>
+              <a class="btn btn-ghost" href="{{ sarlaft_window_url }}" target="_blank" rel="noopener noreferrer">Abrir en pestaña nueva</a>
+            </div>
+            <div id="externalPortalStatus" class="sarlaft-status" aria-live="polite"></div>
+          </div>
+        </div>
+        {% else %}
+        <div class="sarlaft-frame__loading" id="sarlaftFrameLoading">
+          <div class="sarlaft-loading-card">
+            <div class="sarlaft-spinner" aria-hidden="true"></div>
+            <strong>Cargando portal SARLAFT dentro de esta misma pantalla</strong>
+            <p>El visor usa un proxy local seguro para mantener la navegación en <code>/sarlaft</code> y evitar redirecciones fuera del módulo.</p>
+          </div>
+        </div>
+        <iframe id="sarlaftPortalFrame" title="Portal SARLAFT" loading="eager" referrerpolicy="strict-origin-when-cross-origin" allow="fullscreen" sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-downloads allow-modals"></iframe>
+        <div class="sarlaft-frame__fallback" id="sarlaftFrameFallback">
+          El visor no terminó de mostrarse correctamente. Usa <strong>Actualizar visor</strong>. La carga seguirá haciéndose dentro de <code>/sarlaft</code> y no redirigirá fuera del módulo.
+        </div>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+(function () {
+  var STORAGE_KEY = 'sarlaft-form-state-v2';
+  var form = document.getElementById('sarlaftForm');
+  var clearBtn = document.getElementById('clearSarlaftBtn');
+  var saveBtn = document.getElementById('saveSarlaftBtn');
+  var statusBox = document.getElementById('sarlaftStatus');
+  var recentBox = document.getElementById('sarlaftRecent');
+  var recentText = document.getElementById('sarlaftRecentText');
+  var clock = document.getElementById('sessionClock');
+  var portalFrame = document.getElementById('sarlaftPortalFrame');
+  var refreshFrameBtn = document.getElementById('refreshFrameBtn');
+  var fullscreenFrameBtn = document.getElementById('fullscreenFrameBtn');
+  var frameCard = document.getElementById('sarlaftFrameCard');
+  var frameFallback = document.getElementById('sarlaftFrameFallback');
+  var frameLoading = document.getElementById('sarlaftFrameLoading');
+  var openExternalPortalBtn = document.getElementById('openExternalPortalBtn');
+  var openExternalPortalBtnInline = document.getElementById('openExternalPortalBtnInline');
+  var externalPortalStatus = document.getElementById('externalPortalStatus');
+  var popupOnly = {{ sarlaft_popup_only|tojson }};
+  var desiredFramePrefix = {{ sarlaft_proxy_url|tojson }};
+  var initialSrcdoc = {{ sarlaft_initial_doc|tojson }};
+  var externalPortalUrl = {{ sarlaft_window_url|tojson }};
+  var frameLoadedAtLeastOnce = false;
+  var externalWindowRef = null;
+
+  function updateClock() {
+    if (!clock) return;
+    var now = new Date();
+    var pad = function (v) { return String(v).padStart(2, '0'); };
+    clock.textContent = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+  }
+
+  function persistState() {
+    if (!form) return;
+    var payload = {
+      office: form.office ? form.office.value : '',
+      topic: form.topic ? form.topic.value : '',
+      description: form.description ? form.description.value : ''
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  }
+
+  function restoreState() {
+    if (!form) return;
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      var data = JSON.parse(raw);
+      if (form.office && data.office) form.office.value = data.office;
+      if (form.topic && data.topic) form.topic.value = data.topic;
+      if (form.description && data.description) form.description.value = data.description;
+    } catch (e) {}
+  }
+
+  function setViewerLoading(isLoading) {
+    if (!frameLoading) return;
+    frameLoading.classList.toggle('is-hidden', !isLoading);
+  }
+
+  function setFallback(message) {
+    if (!frameFallback) return;
+    if (message) {
+      frameFallback.textContent = message;
+      frameFallback.classList.add('is-visible');
+      return;
+    }
+    frameFallback.classList.remove('is-visible');
+  }
+
+  function setExternalStatus(message, isError) {
+    if (!externalPortalStatus) return;
+    externalPortalStatus.textContent = message || '';
+    externalPortalStatus.classList.toggle('is-error', !!isError);
+  }
+
+  function openExternalPortal(event) {
+    if (event && event.preventDefault) event.preventDefault();
+    if (!externalPortalUrl) {
+      setExternalStatus('No hay una URL de autenticación configurada.', true);
+      return;
+    }
+    var width = Math.min(1280, Math.max(960, Math.floor(window.screen.width * 0.78)));
+    var height = Math.min(900, Math.max(760, Math.floor(window.screen.height * 0.82)));
+    var left = Math.max(0, Math.floor((window.screen.width - width) / 2));
+    var top = Math.max(0, Math.floor((window.screen.height - height) / 2));
+    var features = ['popup=yes', 'noopener=yes', 'noreferrer=yes', 'resizable=yes', 'scrollbars=yes', 'width=' + width, 'height=' + height, 'left=' + left, 'top=' + top].join(',');
+    externalWindowRef = window.open(externalPortalUrl, 'sarlaftExternalPortal', features);
+    if (externalWindowRef) {
+      try { externalWindowRef.focus(); } catch (e) {}
+      setExternalStatus('La autenticación se abrió en una ventana segura. Esta página se mantiene en /sarlaft.', false);
+      return;
+    }
+    setExternalStatus('El navegador bloqueó la ventana emergente. Usa el botón "Abrir en pestaña nueva".', true);
+  }
+
+  function hydrateIframe(html) {
+    if (!portalFrame) return;
+    portalFrame.removeAttribute('src');
+    portalFrame.srcdoc = html || initialSrcdoc || '';
+  }
+
+  function loadPortal(forceNetwork) {
+    if (!portalFrame || popupOnly) return Promise.resolve();
+    setFallback('');
+    setViewerLoading(true);
+    if (!forceNetwork && initialSrcdoc) {
+      hydrateIframe(initialSrcdoc);
+      frameLoadedAtLeastOnce = true;
+      window.setTimeout(function () { setViewerLoading(false); }, 500);
+      return Promise.resolve();
+    }
+    return fetch(desiredFramePrefix + (desiredFramePrefix.indexOf('?') === -1 ? '?' : '&') + '_ts=' + Date.now(), {
+      method: 'GET',
+      headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'text/html' },
+      credentials: 'same-origin',
+      cache: 'no-store'
+    })
+      .then(function (response) {
+        if (!response.ok) throw new Error('No fue posible obtener el portal SARLAFT.');
+        return response.text();
+      })
+      .then(function (html) {
+        if (!html || !html.trim()) throw new Error('El portal respondió sin contenido renderizable.');
+        hydrateIframe(html);
+        frameLoadedAtLeastOnce = true;
+      })
+      .catch(function () {
+        hydrateIframe(initialSrcdoc || '<!doctype html><html><body style="font-family:Arial,sans-serif;padding:24px">No fue posible cargar el portal.</body></html>');
+        setFallback('El portal respondió, pero no terminó de renderizarse como se esperaba. El contenido se mantiene dentro de /sarlaft y puedes reintentar con Actualizar visor.');
+      })
+      .finally(function () {
+        window.setTimeout(function () { setViewerLoading(false); }, 700);
+      });
+  }
+
+  updateClock();
+  setInterval(updateClock, 1000);
+  restoreState();
+
+  if (form) {
+    ['change', 'input'].forEach(function (eventName) {
+      form.addEventListener(eventName, persistState);
+    });
+  }
+
+  if (clearBtn) {
+    clearBtn.addEventListener('click', function () {
+      form.reset();
+      localStorage.removeItem(STORAGE_KEY);
+      statusBox.textContent = '';
+      statusBox.classList.remove('is-error');
+    });
+  }
+
+  [openExternalPortalBtn, openExternalPortalBtnInline].forEach(function (button) {
+    if (button) button.addEventListener('click', openExternalPortal);
+  });
+
+  if (refreshFrameBtn && portalFrame) {
+    refreshFrameBtn.addEventListener('click', function () {
+      loadPortal(true);
+    });
+  }
+
+  if (portalFrame) {
+    portalFrame.addEventListener('load', function () {
+      frameLoadedAtLeastOnce = true;
+      window.setTimeout(function () { setViewerLoading(false); }, 250);
+    });
+    window.setTimeout(function () {
+      if (!frameLoadedAtLeastOnce && !popupOnly) {
+        setFallback('El visor sigue cargando dentro de /sarlaft. Si el portal no aparece de inmediato, usa Actualizar visor; la página no redirigirá fuera del módulo.');
+      }
+    }, 6500);
+    loadPortal(false);
+  } else if (popupOnly) {
+    setExternalStatus('Usa la ventana segura para autenticarte. El módulo principal no redirigirá fuera de /sarlaft.', false);
+  }
+
+  if (fullscreenFrameBtn && frameCard) {
+    fullscreenFrameBtn.addEventListener('click', function () {
+      var target = frameCard;
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+        return;
+      }
+      if (target.requestFullscreen) {
+        target.requestFullscreen();
+      }
+    });
+  }
+
+  if (!form) return;
+  form.addEventListener('submit', function (event) {
+    event.preventDefault();
+    var payload = new FormData(form);
+    saveBtn.disabled = true;
+    statusBox.classList.remove('is-error');
+    statusBox.textContent = 'Guardando registro...';
+
+    fetch('{{ url_for('cases.sarlaft_save') }}', {
+      method: 'POST',
+      body: payload,
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+      .then(function (response) {
+        return response.json().then(function (data) {
+          if (!response.ok || !data.ok) {
+            throw new Error(data.error || 'No fue posible guardar el registro.');
+          }
+          return data;
+        });
+      })
+      .then(function (data) {
+        statusBox.textContent = data.message || 'Registro almacenado correctamente.';
+        recentBox.classList.add('is-visible');
+        recentText.textContent = data.entry.created_at_text + ' · ' + data.entry.user_name + ' · ' + data.entry.office + ' · ' + data.entry.topic_label + ' · ' + data.entry.description;
+        persistState();
+      })
+      .catch(function (error) {
+        statusBox.classList.add('is-error');
+        statusBox.textContent = error.message || 'No fue posible guardar el registro.';
+      })
+      .finally(function () {
+        saveBtn.disabled = false;
+      });
+  });
+})();
+</script>
+{% endblock %}

@@ -303,7 +303,7 @@ def log_exception(
         category,
         "ERROR",
         event,
-        detail="UNEXPECTED_ERROR",
+        detail=type(exc).__name__,
         source=source,
         user_id=user_id,
         case_id=case_id,

@@ -80,6 +80,21 @@ def ensure_schema() -> None:
                 CONSTRAINT PK_app_logs PRIMARY KEY CLUSTERED (id ASC)
             );
         END;
+        
+        IF OBJECT_ID('dbo.sarlaft_queries', 'U') IS NULL
+        BEGIN
+            CREATE TABLE dbo.sarlaft_queries(
+                id BIGINT IDENTITY(1,1) NOT NULL,
+                user_id NVARCHAR(120) NOT NULL,
+                user_name NVARCHAR(200) NULL,
+                user_email NVARCHAR(200) NULL,
+                office_name NVARCHAR(120) NOT NULL,
+                description NVARCHAR(500) NOT NULL,
+                topic NVARCHAR(60) NOT NULL,
+                created_at DATETIME2(7) NOT NULL CONSTRAINT DF_sarlaft_queries_created_at DEFAULT(SYSDATETIME()),
+                CONSTRAINT PK_sarlaft_queries PRIMARY KEY CLUSTERED (id ASC)
+            );
+        END;
         """
     )
 
@@ -148,6 +163,25 @@ def ensure_schema() -> None:
             CREATE NONCLUSTERED INDEX IX_app_logs_case_created
                 ON dbo.app_logs(case_id ASC, created_at DESC)
                 WHERE case_id IS NOT NULL;
+        END;
+        
+
+        IF NOT EXISTS (
+            SELECT 1 FROM sys.indexes
+            WHERE name = 'IX_sarlaft_queries_user_created' AND object_id = OBJECT_ID('dbo.sarlaft_queries')
+        )
+        BEGIN
+            CREATE NONCLUSTERED INDEX IX_sarlaft_queries_user_created
+                ON dbo.sarlaft_queries(user_id ASC, created_at DESC);
+        END;
+
+        IF NOT EXISTS (
+            SELECT 1 FROM sys.indexes
+            WHERE name = 'IX_sarlaft_queries_created' AND object_id = OBJECT_ID('dbo.sarlaft_queries')
+        )
+        BEGIN
+            CREATE NONCLUSTERED INDEX IX_sarlaft_queries_created
+                ON dbo.sarlaft_queries(created_at DESC);
         END;
         """
     )
